@@ -381,6 +381,17 @@ class Registry:
             entry.setdefault("first_seen", time.time())
             entry.update(ip=ip, online=True, present=True,
                          last_seen=now, last_present=now, last_response=now)
+            # A pilot describes exactly one colour mode. Keeping fields from
+            # the previous mode made /state report RGB and temperature at once.
+            if any(k in pilot for k in ("r", "g", "b")):
+                for key in ("temp", "c", "w"):
+                    entry.pop(key, None)
+            elif "temp" in pilot:
+                for key in ("r", "g", "b", "c", "w"):
+                    entry.pop(key, None)
+            elif any(k in pilot for k in ("c", "w")):
+                for key in ("r", "g", "b", "temp"):
+                    entry.pop(key, None)
             for key in REPORTED:
                 if key in pilot:
                     entry[key] = pilot[key]
@@ -578,7 +589,7 @@ class Registry:
 def make_handler(registry: Registry, token: str, ui: bytes):
     class Handler(BaseHTTPRequestHandler):
         protocol_version = "HTTP/1.1"
-        server_version = "wiz-bulb-api/1.7"
+        server_version = "wiz-bulb-api/1.8"
 
         # -- helpers --------------------------------------------------------
 

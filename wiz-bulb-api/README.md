@@ -24,7 +24,9 @@ a card with:
 - the **colour currently set** (RGB, colour temperature or white channel) as a
   swatch
 - a single Turn on / Turn off button
-- a category selector, and a **Remove** button when the bulb is offline
+- a colour button next to it: warm/neutral/cool white, ten presets and a
+  custom picker
+- a room selector, and a **Remove** button when the bulb is offline
 
 Known bulbs are remembered in a state file, so a bulb that is off — or gone —
 stays in the list instead of disappearing. If it reappears later at a new DHCP
@@ -32,7 +34,8 @@ address, its MAC entry is updated in place; the card never changes position.
 Remove a bulb manually once you are sure it no longer exists.
 
 Rooms (categories in the API) can be created with **+ Room** and assigned per
-card; the room tabs above the grid filter the list.
+card. The home view is split into one row per room, with **Uncategorised**
+always last. The room tabs filter the list.
 
 Use the button to identify a bulb physically — the lamp changes immediately.
 There is no dimming or colour control by design. The page refreshes every 15 s;
