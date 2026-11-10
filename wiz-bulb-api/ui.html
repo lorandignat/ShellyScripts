@@ -243,7 +243,7 @@
   .room-head .n { color: var(--muted-2); font-size: 12px; }
   .room-grid {
     display: grid; gap: 16px;
-    grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
   }
   .room-empty {
     padding: 26px 18px; border-radius: 18px;
@@ -252,7 +252,7 @@
   }
   .card {
     position: relative;
-    display: grid; grid-template-columns: 60px minmax(0, 1fr) auto;
+    display: grid; grid-template-columns: minmax(0, 1fr) auto;
     align-items: center; gap: 15px;
     padding: 18px;
     border-radius: var(--radius);
@@ -276,30 +276,20 @@
   .card.offline { opacity: .55; }
   .card.offline:hover { transform: none; }
 
-  .orb {
-    width: 60px; height: 60px; border-radius: 50%;
-    background: var(--orb, #1b2233);
-    border: 1px solid rgba(255, 255, 255, .10);
-    box-shadow:
-      inset 0 -10px 20px rgba(0, 0, 0, .42),
-      inset 0 2px 0 rgba(255, 255, 255, .18),
-      0 10px 22px rgba(2, 6, 16, .35);
-    transition: background .4s;
-  }
-
   .info { min-width: 0; }
   .name {
     font-size: 15.5px; font-weight: 650; letter-spacing: -.01em;
-    display: flex; align-items: center; gap: 8px;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   }
   .model {
     margin-top: 2px; color: var(--muted); font-size: 12px;
-    overflow-wrap: anywhere;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   }
   .addr {
-    margin-top: 3px; display: flex; align-items: center; gap: 7px; flex-wrap: wrap;
-    color: var(--muted-2); font-size: 11.5px;
+    margin-top: 3px; display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
+    color: var(--muted-2); font-size: 11px;
     font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    line-height: 1.35;
   }
   .addr .sep { opacity: .5; }
   .addr .mac {
@@ -329,12 +319,12 @@
 
   .cat {
     margin-top: 7px; display: flex; align-items: center; gap: 6px;
-    color: var(--muted-2);
+    min-width: 0; color: var(--muted-2);
   }
   .cat svg { flex: none; opacity: .65; }
   .cat select {
     appearance: none; -webkit-appearance: none;
-    max-width: 170px;
+    width: 100%; max-width: 180px; min-width: 0;
     padding: 2px 16px 2px 0;
     border: 0; background: transparent;
     color: var(--muted); font: inherit; font-size: 12px;
@@ -393,7 +383,7 @@
   .color-wrap { position: relative; flex: none; }
   .color {
     position: relative;
-    width: 44px; height: 44px; padding: 0;
+    width: 42px; height: 42px; padding: 0;
     border-radius: 50%;
     border: 1px solid rgba(255, 255, 255, .16);
     background:
@@ -564,8 +554,7 @@
   @media (max-width: 560px) {
     h1 { font-size: 20px; }
     .room-grid { grid-template-columns: 1fr; }
-    .card { grid-template-columns: 52px minmax(0, 1fr) auto; gap: 13px; padding: 15px; }
-    .orb { width: 52px; height: 52px; }
+    .card { gap: 12px; padding: 15px; }
     .power { padding: 10px 13px; }
     .power .lbl { display: none; }
   }
@@ -873,26 +862,6 @@ function kelvinToRgb(kelvin) {
   return [c(r), c(g), c(b)];
 }
 
-function orbColor(bulb) {
-  if (!bulb.present) return "#161d2b";
-  if (!bulb.state) return "#1b2333";
-  let rgb;
-  if (bulb.r != null && bulb.g != null && bulb.b != null &&
-      (bulb.r + bulb.g + bulb.b) > 0) {
-    rgb = [bulb.r, bulb.g, bulb.b];
-  } else if (bulb.temp != null) {
-    rgb = kelvinToRgb(bulb.temp);
-  } else if (bulb.w != null) {
-    rgb = [bulb.w, Math.round(bulb.w * .92), Math.round(bulb.w * .78)];
-  } else if (bulb.c != null) {
-    rgb = [Math.round(bulb.c * .88), Math.round(bulb.c * .94), bulb.c];
-  } else {
-    rgb = [255, 214, 160];
-  }
-  const dim = (bulb.dimming == null ? 100 : Math.max(15, bulb.dimming)) / 100;
-  return `rgb(${rgb.map(v => Math.round(v * dim)).join(",")})`;
-}
-
 function statusOf(bulb) {
   if (!bulb.present) return { key: "offline", label: "Offline", cls: "" };
   if (!bulb.responsive) return { key: "warn", label: "No response", cls: "warn" };
@@ -1119,7 +1088,8 @@ function colorControl(bulb) {
   button.setAttribute("aria-label", "Set colour");
   const sw = document.createElement("span");
   sw.className = "sw";
-  sw.style.setProperty("--sw", rgbCss(lampRgb(bulb)));
+  // Off means off: do not show the last colour as if the lamp were lit.
+  sw.style.setProperty("--sw", bulb.state ? rgbCss(lampRgb(bulb)) : "#232b3c");
   button.append(sw);
 
   const palette = document.createElement("div");
@@ -1174,10 +1144,6 @@ function card(bulb) {
   const el = document.createElement("article");
   el.className = "card" + (status.key === "offline" ? " offline" : "");
 
-  const orb = document.createElement("div");
-  orb.className = "orb";
-  orb.style.setProperty("--orb", orbColor(bulb));
-
   const info = document.createElement("div");
   info.className = "info";
 
@@ -1187,9 +1153,8 @@ function card(bulb) {
 
   const model = document.createElement("div");
   model.className = "model";
-  const room = categoryName(bulb.category);
   model.textContent = bulb.model || "WiZ bulb";
-  if (room) model.textContent += " · " + room;
+  model.title = bulb.model || "WiZ bulb";
 
   const addr = document.createElement("div");
   addr.className = "addr";
@@ -1263,7 +1228,7 @@ function card(bulb) {
   controls.className = "controls";
   controls.append(colorControl(bulb), button);
 
-  el.append(orb, info, controls);
+  el.append(info, controls);
   return el;
 }
 
