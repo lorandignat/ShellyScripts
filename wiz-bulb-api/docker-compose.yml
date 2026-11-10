@@ -1,0 +1,35 @@
+services:
+  wiz-bulb-api:
+    # Built locally by default. If you enable the workflow in ci/docker.yml,
+    # this is also the image that gets published to GHCR.
+    image: ghcr.io/lorandignat/shellyscripts-wiz-bulb-api:latest
+    build: .
+    container_name: wiz-bulb-api
+    restart: unless-stopped
+
+    # Host networking is the simplest option: the scanner sees the LAN directly
+    # (broadcast included) and the API is reachable at <host-ip>:8077.
+    network_mode: host
+
+    environment:
+      WIZ_SUBNET: 192.168.1.0/24
+      WIZ_PORT: "8077"
+      WIZ_SCAN_INTERVAL: "60"
+      WIZ_SCAN_TIMEOUT: "0.3"
+      WIZ_OP_TIMEOUT: "1.5"
+      WIZ_WORKERS: "64"
+      WIZ_LOG_LEVEL: INFO
+      # Optional bearer token, e.g. when exposing the API beyond the LAN.
+      # WIZ_API_TOKEN: "change-me"
+
+    read_only: true
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
+
+# --- Bridge networking alternative -------------------------------------------
+# Remove network_mode: host and use this instead. Discovery uses unicast only,
+# so it still works from the Docker bridge; broadcast does not.
+#
+#    ports:
+#      - "8077:8077"

@@ -1,0 +1,352 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>WiZ bulbs</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #0f1216;
+    --panel: #171b21;
+    --panel-2: #1e232b;
+    --line: #2a313b;
+    --text: #e8edf3;
+    --muted: #8b96a5;
+    --on: #37d67a;
+    --off: #4a5260;
+    --accent: #4aa8ff;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font: 15px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+  header {
+    position: sticky; top: 0; z-index: 2;
+    display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center;
+    padding: 14px 20px;
+    background: rgba(15, 18, 22, .92);
+    backdrop-filter: blur(8px);
+    border-bottom: 1px solid var(--line);
+  }
+  h1 { font-size: 18px; margin: 0; font-weight: 650; letter-spacing: .2px; }
+  .summary { color: var(--muted); font-size: 13px; }
+  .summary b { color: var(--text); font-weight: 600; }
+  input[type=search] {
+    margin-left: auto;
+    width: min(280px, 100%);
+    padding: 8px 11px;
+    border-radius: 8px;
+    border: 1px solid var(--line);
+    background: var(--panel);
+    color: var(--text);
+    font: inherit;
+  }
+  input[type=search]:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+  main {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(290px, 1fr));
+    gap: 12px;
+    padding: 18px 20px 40px;
+    max-width: 1500px;
+    margin: 0 auto;
+  }
+  .card {
+    display: grid;
+    grid-template-columns: 46px 1fr auto;
+    gap: 13px;
+    align-items: center;
+    padding: 14px;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    transition: border-color .15s, background .15s;
+  }
+  .card:hover { border-color: #39424f; }
+  .card.offline { opacity: .55; }
+  .swatch {
+    width: 46px; height: 46px; border-radius: 50%;
+    background: var(--swatch, #1c1f26);
+    border: 1px solid #0006;
+    box-shadow: 0 0 0 1px #ffffff10;
+    transition: background .25s;
+  }
+  .card.on .swatch { box-shadow: 0 0 22px 2px var(--glow, transparent); }
+  .meta { min-width: 0; }
+  .mac { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13px; }
+  .sub { color: var(--muted); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .status { margin-top: 4px; font-size: 12px; }
+  .pill {
+    display: inline-block; padding: 1px 7px; border-radius: 999px;
+    font-size: 11px; font-weight: 600; letter-spacing: .3px;
+  }
+  .pill.on  { background: #123c26; color: #66e39a; }
+  .pill.off { background: #232a33; color: #9aa6b5; }
+  .pill.gone { background: #3a2020; color: #ff9b9b; }
+  button.toggle {
+    padding: 9px 14px;
+    border-radius: 9px;
+    border: 1px solid var(--line);
+    background: var(--panel-2);
+    color: var(--text);
+    font: inherit; font-weight: 600; font-size: 13px;
+    cursor: pointer;
+    min-width: 86px;
+  }
+  button.toggle:hover:not(:disabled) { border-color: var(--accent); }
+  button.toggle:disabled { opacity: .45; cursor: default; }
+  button.toggle[data-on="1"] { background: #123c26; border-color: #1d5c3a; color: #7ff0ac; }
+  .empty {
+    grid-column: 1 / -1; text-align: center; color: var(--muted);
+    padding: 60px 20px; line-height: 1.7;
+  }
+  .empty code { background: var(--panel); padding: 2px 6px; border-radius: 5px; }
+  #toast {
+    position: fixed; left: 50%; bottom: 22px; transform: translateX(-50%) translateY(20px);
+    background: #2a1113; border: 1px solid #6b2a2f; color: #ffc4c8;
+    padding: 10px 16px; border-radius: 9px; font-size: 13px;
+    opacity: 0; pointer-events: none; transition: opacity .2s, transform .2s;
+    max-width: min(90vw, 560px);
+  }
+  #toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+  footer { color: var(--muted); font-size: 12px; text-align: center; padding: 0 20px 30px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>WiZ bulbs</h1>
+  <span class="summary" id="summary">loading…</span>
+  <input id="filter" type="search" placeholder="Filter by MAC, IP or model" autocomplete="off">
+</header>
+
+<main id="grid"></main>
+
+<div id="toast" role="status"></div>
+<footer>Toggle switches a bulb instantly — use it to find which lamp is which. Bulbs that do not answer are shown greyed out.</footer>
+
+<script>
+"use strict";
+
+const state = {
+  bulbs: [],
+  filter: "",
+  busy: new Set(),
+  token: localStorage.getItem("wiz-token") || "",
+  timer: null,
+  loading: false
+};
+
+const grid = document.getElementById("grid");
+const summary = document.getElementById("summary");
+const toast = document.getElementById("toast");
+const filterInput = document.getElementById("filter");
+
+// ---- helpers ---------------------------------------------------------------
+
+function toastError(message) {
+  toast.textContent = message;
+  toast.classList.add("show");
+  clearTimeout(toast._hide);
+  toast._hide = setTimeout(() => toast.classList.remove("show"), 4000);
+}
+
+// One retry, because a 401 may just mean the token prompt was cancelled before.
+async function api(path, options, retried) {
+  const opts = Object.assign({}, options);
+  opts.headers = Object.assign({}, opts.headers);
+  if (state.token) opts.headers["Authorization"] = "Bearer " + state.token;
+
+  const res = await fetch(path, opts);
+  if (res.status === 401 && !retried) {
+    const entered = prompt("This API needs a token (WIZ_API_TOKEN):");
+    if (entered && entered.trim()) {
+      state.token = entered.trim();
+      localStorage.setItem("wiz-token", state.token);
+      return api(path, options, true);
+    }
+  }
+  return res;
+}
+
+function kelvinToRgb(kelvin) {
+  const t = Math.max(1000, Math.min(12000, kelvin)) / 100;
+  let r, g, b;
+  if (t <= 66) {
+    r = 255;
+    g = 99.47 * Math.log(t) - 161.12;
+    b = t <= 19 ? 0 : 138.52 * Math.log(t - 10) - 305.04;
+  } else {
+    r = 329.7 * Math.pow(t - 60, -0.1332);
+    g = 288.12 * Math.pow(t - 60, -0.0755);
+    b = 255;
+  }
+  const c = v => Math.max(0, Math.min(255, Math.round(v)));
+  return [c(r), c(g), c(b)];
+}
+
+function lightColor(bulb) {
+  if (!bulb.online) return ["#1a1d23", "transparent"];
+  if (!bulb.state) return ["#1c1f26", "transparent"];
+
+  let rgb;
+  if (bulb.r != null && bulb.g != null && bulb.b != null &&
+      (bulb.r + bulb.g + bulb.b) > 0) {
+    rgb = [bulb.r, bulb.g, bulb.b];
+  } else if (bulb.temp != null) {
+    rgb = kelvinToRgb(bulb.temp);
+  } else if (bulb.w != null) {
+    rgb = [bulb.w, Math.round(bulb.w * .92), Math.round(bulb.w * .78)];
+  } else if (bulb.c != null) {
+    rgb = [Math.round(bulb.c * .88), Math.round(bulb.c * .94), bulb.c];
+  } else {
+    rgb = [255, 214, 160];
+  }
+  const color = `rgb(${rgb.join(",")})`;
+  return [color, color];
+}
+
+// ---- rendering -------------------------------------------------------------
+
+function describe(bulb) {
+  if (!bulb.online) return { label: "off-network", cls: "gone" };
+  return bulb.state
+    ? { label: "on", cls: "on" }
+    : { label: "off", cls: "off" };
+}
+
+function render() {
+  const needle = state.filter.trim().toLowerCase();
+  const visible = state.bulbs.filter(b =>
+    !needle || `${b.mac} ${b.ip} ${b.model || ""}`.toLowerCase().includes(needle));
+
+  const online = state.bulbs.filter(b => b.online).length;
+  summary.innerHTML =
+    `<b>${online}</b> online · ${state.bulbs.length} known in total`;
+
+  grid.replaceChildren();
+
+  if (!visible.length) {
+    const empty = document.createElement("div");
+    empty.className = "empty";
+    empty.innerHTML = state.bulbs.length
+      ? "No bulb matches the filter."
+      : "No bulbs found yet.<br>Check <code>WIZ_SUBNET</code> and that the container can reach UDP 38899.";
+    grid.append(empty);
+    return;
+  }
+
+  for (const bulb of visible) {
+    const card = document.createElement("article");
+    card.className = "card" + (bulb.online ? (bulb.state ? " on" : " off") : " offline");
+
+    const [swatch, glow] = lightColor(bulb);
+    card.style.setProperty("--swatch", swatch);
+    card.style.setProperty("--glow", glow);
+
+    const meta = document.createElement("div");
+    meta.className = "meta";
+
+    const mac = document.createElement("div");
+    mac.className = "mac";
+    const hex = bulb.mac.replace(/(..)(?=.)/g, "$1:");
+    mac.textContent = hex;
+
+    const sub = document.createElement("div");
+    sub.className = "sub";
+    sub.textContent = [bulb.ip, bulb.model].filter(Boolean).join(" · ");
+
+    const statusRow = document.createElement("div");
+    statusRow.className = "status";
+    const info = describe(bulb);
+    const pill = document.createElement("span");
+    pill.className = "pill " + info.cls;
+    pill.textContent = info.label;
+    statusRow.append(pill);
+
+    if (bulb.online && bulb.state && bulb.dimming != null) {
+      statusRow.append(document.createTextNode(`  ${bulb.dimming}%`));
+    }
+
+    meta.append(mac, sub, statusRow);
+
+    const button = document.createElement("button");
+    button.className = "toggle";
+    button.dataset.mac = bulb.mac;
+    button.dataset.on = bulb.online && bulb.state ? "1" : "0";
+    button.disabled = !bulb.online || state.busy.has(bulb.mac);
+    button.textContent = state.busy.has(bulb.mac)
+      ? "…"
+      : (!bulb.online ? "Offline" : (bulb.state ? "Turn off" : "Turn on"));
+    button.addEventListener("click", () => toggle(bulb.mac));
+
+    card.append(createSwatchWrap(swatch, glow), meta, button);
+    grid.append(card);
+  }
+}
+
+function createSwatchWrap(color, glow) {
+  const wrap = document.createElement("div");
+  wrap.className = "swatch";
+  wrap.style.background = color;
+  wrap.style.boxShadow = glow === "transparent" ? "" : `0 0 22px 2px ${glow}`;
+  return wrap;
+}
+
+// ---- data ------------------------------------------------------------------
+
+async function load() {
+  if (state.loading) return;
+  state.loading = true;
+  try {
+    const res = await api("/bulbs?live=1");
+    if (!res.ok) throw new Error("HTTP " + res.status);
+    const data = await res.json();
+    state.bulbs = data.bulbs || [];
+    render();
+  } catch (err) {
+    toastError("Could not load bulbs: " + err.message);
+  } finally {
+    state.loading = false;
+    schedule();
+  }
+}
+
+function schedule() {
+  clearTimeout(state.timer);
+  if (document.hidden) return;
+  state.timer = setTimeout(load, 5000);
+}
+
+async function toggle(mac) {
+  if (state.busy.has(mac)) return;
+  state.busy.add(mac);
+  render();
+  try {
+    const res = await api(`/bulb/${encodeURIComponent(mac)}/toggle`, { method: "POST" });
+    if (!res.ok) throw new Error(res.status === 503 ? "bulb is not reachable" : "HTTP " + res.status);
+    await load();
+  } catch (err) {
+    toastError("Toggle failed: " + err.message);
+  } finally {
+    state.busy.delete(mac);
+    render();
+  }
+}
+
+filterInput.addEventListener("input", () => {
+  state.filter = filterInput.value;
+  render();
+});
+
+document.addEventListener("visibilitychange", () => {
+  if (!document.hidden) load();
+  else clearTimeout(state.timer);
+});
+
+load();
+</script>
+</body>
+</html>
