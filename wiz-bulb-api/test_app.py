@@ -1,5 +1,6 @@
 import json
 import threading
+import time
 import unittest
 import urllib.error
 import urllib.request
@@ -103,6 +104,39 @@ class UnitTest(unittest.TestCase):
     def test_parse_subnet(self):
         hosts = app.parse_subnet("192.168.1.0/30")
         self.assertEqual(hosts, ["192.168.1.1", "192.168.1.2"])
+
+    def test_one_miss_only_means_no_response(self):
+        mac = "aabbccddeeff"
+        reg = app.Registry(hosts=["127.0.0.1"], scan_timeout=0.01, op_timeout=0.01,
+                           workers=1, interval=60, ttl=180, probe_timeout=0.01,
+                           response_grace=30, presence_interval=5,
+                           presence_timeout=0.01)
+        now = time.monotonic()
+        with reg._lock:
+            reg._by_mac[mac] = {"ip": "127.0.0.1", "present": True,
+                                "last_present": now, "last_response": now}
+
+        def dead(*_args, **_kwargs):
+            raise OSError("timeout")
+
+        original = app.wiz_call
+        app.wiz_call = dead
+        try:
+            self.assertFalse(reg.probe(mac))
+            self.assertTrue(reg._entry(mac)["present"])   # still on the LAN
+            row = next(r for r in reg.entries() if r["mac"] == mac)
+            self.assertTrue(row["responsive"])            # answered recently
+
+            with reg._lock:
+                reg._by_mac[mac]["last_response"] = time.monotonic() - 31
+            row = next(r for r in reg.entries() if r["mac"] == mac)
+            self.assertTrue(row["present"])
+            self.assertFalse(row["responsive"])           # 30 s without reply
+        finally:
+            app.wiz_call = original
+
+    def test_host_up_uses_tcp_refusal(self):
+        self.assertTrue(app.Registry._host_up("127.0.0.1", 0.2))
 
 
 if __name__ == "__main__":

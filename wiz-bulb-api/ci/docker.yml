@@ -7,7 +7,7 @@
 #
 # and adjust nothing else. The image becomes:
 #
-#   ghcr.io/lorandignat/shellyscripts-wiz-bulb-api:latest
+#   ghcr.io/<owner>/shellyscripts-wiz-bulb-api:latest
 
 name: wiz-bulb-api
 

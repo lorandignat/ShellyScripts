@@ -3,162 +3,274 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>WiZ bulbs</title>
+<meta name="color-scheme" content="dark">
+<title>Lights</title>
 <style>
   :root {
-    color-scheme: dark;
-    --bg: #0f1216;
-    --panel: #171b21;
-    --panel-2: #1e232b;
-    --line: #2a313b;
-    --text: #e8edf3;
-    --muted: #8b96a5;
-    --on: #37d67a;
-    --off: #4a5260;
-    --accent: #4aa8ff;
+    --bg: #0c0e12;
+    --bg-2: #11141a;
+    --card: #171b22;
+    --card-hover: #1c212a;
+    --line: #262c36;
+    --line-soft: #1f242c;
+    --text: #eef2f7;
+    --muted: #8b95a4;
+    --muted-2: #5f6875;
+    --green: #3ddc97;
+    --amber: #f5b544;
+    --grey: #6a7381;
+    --accent: #5aa9ff;
+    --radius: 16px;
   }
   * { box-sizing: border-box; }
+  html, body { height: 100%; }
   body {
     margin: 0;
-    background: var(--bg);
+    background:
+      radial-gradient(1100px 500px at 15% -10%, #16202c 0%, transparent 60%),
+      radial-gradient(900px 500px at 100% 0%, #1a1620 0%, transparent 55%),
+      var(--bg);
     color: var(--text);
-    font: 15px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    font: 15px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Roboto, sans-serif;
+    -webkit-font-smoothing: antialiased;
   }
+
+  /* ---- header ---- */
   header {
-    position: sticky; top: 0; z-index: 2;
-    display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center;
-    padding: 14px 20px;
-    background: rgba(15, 18, 22, .92);
-    backdrop-filter: blur(8px);
-    border-bottom: 1px solid var(--line);
+    position: sticky; top: 0; z-index: 5;
+    padding: 18px 22px 14px;
+    background: rgba(12, 14, 18, .82);
+    backdrop-filter: blur(14px);
+    border-bottom: 1px solid var(--line-soft);
   }
-  h1 { font-size: 18px; margin: 0; font-weight: 650; letter-spacing: .2px; }
-  .summary { color: var(--muted); font-size: 13px; }
-  .summary b { color: var(--text); font-weight: 600; }
-  input[type=search] {
-    margin-left: auto;
-    width: min(280px, 100%);
-    padding: 8px 11px;
-    border-radius: 8px;
-    border: 1px solid var(--line);
-    background: var(--panel);
-    color: var(--text);
-    font: inherit;
+  .bar {
+    display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
+    max-width: 1480px; margin: 0 auto;
   }
-  input[type=search]:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+  h1 {
+    margin: 0; font-size: 21px; font-weight: 650; letter-spacing: -.2px;
+    display: flex; align-items: center; gap: 10px;
+  }
+  h1 svg { color: var(--amber); }
+  .search {
+    margin-left: auto; position: relative; min-width: 220px;
+  }
+  .search input {
+    width: 100%; padding: 9px 12px 9px 34px;
+    background: var(--bg-2); color: var(--text);
+    border: 1px solid var(--line); border-radius: 10px;
+    font: inherit; font-size: 14px;
+    transition: border-color .15s, box-shadow .15s;
+  }
+  .search input:focus {
+    outline: none; border-color: #3a4658;
+    box-shadow: 0 0 0 3px rgba(90, 169, 255, .12);
+  }
+  .search svg {
+    position: absolute; left: 10px; top: 50%; transform: translateY(-50%);
+    color: var(--muted-2); pointer-events: none;
+  }
+  .chips {
+    display: flex; gap: 8px; flex-wrap: wrap;
+    max-width: 1480px; margin: 12px auto 0;
+  }
+  .chip {
+    display: inline-flex; align-items: center; gap: 7px;
+    padding: 6px 11px; border-radius: 999px;
+    background: var(--bg-2); border: 1px solid var(--line);
+    color: var(--muted); font-size: 13px; font-weight: 550;
+    cursor: pointer; user-select: none;
+    transition: border-color .15s, color .15s, background .15s;
+  }
+  .chip:hover { border-color: #36404f; color: var(--text); }
+  .chip.active { border-color: #3c4b60; background: #1a212b; color: var(--text); }
+  .chip b { color: var(--text); font-weight: 650; }
+  .dot {
+    width: 7px; height: 7px; border-radius: 50%; background: var(--grey);
+    flex: none;
+  }
+  .dot.ok { background: var(--green); }
+  .dot.warn { background: var(--amber); }
+
+  /* ---- grid ---- */
   main {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(290px, 1fr));
-    gap: 12px;
-    padding: 18px 20px 40px;
-    max-width: 1500px;
-    margin: 0 auto;
+    max-width: 1480px; margin: 0 auto;
+    padding: 20px 22px 60px;
+    display: grid; gap: 14px;
+    grid-template-columns: repeat(auto-fill, minmax(330px, 1fr));
   }
+
+  /* ---- card ---- */
   .card {
+    position: relative;
     display: grid;
-    grid-template-columns: 46px 1fr auto;
-    gap: 13px;
-    align-items: center;
-    padding: 14px;
-    background: var(--panel);
+    grid-template-columns: 58px 1fr auto;
+    align-items: center; gap: 15px;
+    padding: 16px 16px 16px 17px;
+    background: linear-gradient(180deg, var(--card), #14171d);
     border: 1px solid var(--line);
-    border-radius: 12px;
-    transition: border-color .15s, background .15s;
+    border-radius: var(--radius);
+    transition: background .15s, border-color .15s, transform .12s;
   }
-  .card:hover { border-color: #39424f; }
-  .card.offline { opacity: .55; }
-  .swatch {
-    width: 46px; height: 46px; border-radius: 50%;
-    background: var(--swatch, #1c1f26);
-    border: 1px solid #0006;
-    box-shadow: 0 0 0 1px #ffffff10;
-    transition: background .25s;
+  .card:hover { background: var(--card-hover); border-color: #303845; }
+  .card.offline { opacity: .5; }
+  .card.offline:hover { transform: none; }
+
+  .orb {
+    width: 58px; height: 58px; border-radius: 50%;
+    background: var(--orb, #232833);
+    border: 1px solid rgba(255, 255, 255, .08);
+    box-shadow: inset 0 -8px 16px rgba(0, 0, 0, .35), inset 0 1px 0 rgba(255, 255, 255, .14);
+    transition: background .3s;
   }
-  .card.on .swatch { box-shadow: 0 0 22px 2px var(--glow, transparent); }
-  .meta { min-width: 0; }
-  .mac { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13px; }
-  .sub { color: var(--muted); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .status { margin-top: 4px; font-size: 12px; }
-  .pill {
-    display: inline-block; padding: 1px 7px; border-radius: 999px;
-    font-size: 11px; font-weight: 600; letter-spacing: .3px;
+
+  .info { min-width: 0; }
+  .name {
+    display: flex; align-items: center; gap: 8px;
+    font-size: 15px; font-weight: 650; letter-spacing: -.1px;
   }
-  .pill.on  { background: #123c26; color: #66e39a; }
-  .pill.off { background: #232a33; color: #9aa6b5; }
-  .pill.gone { background: #3a2020; color: #ff9b9b; }
-  button.toggle {
-    padding: 9px 14px;
-    border-radius: 9px;
-    border: 1px solid var(--line);
-    background: var(--panel-2);
-    color: var(--text);
-    font: inherit; font-weight: 600; font-size: 13px;
+  .model {
+    margin-top: 2px;
+    color: var(--muted); font-size: 12.5px;
+    overflow-wrap: anywhere;
+  }
+  .addr {
+    margin-top: 1px;
+    color: var(--muted-2); font-size: 12px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  }
+  .state {
+    margin-top: 7px;
+    display: flex; align-items: center; gap: 7px;
+    color: var(--muted); font-size: 12.5px;
+  }
+  .state .dot { width: 6px; height: 6px; }
+  .state.warn { color: var(--amber); }
+  .state.ok { color: var(--green); }
+  .state .dim { color: var(--muted-2); }
+
+  .power {
+    display: grid; place-items: center; gap: 4px;
+    width: 68px; padding: 10px 0 8px;
+    background: #1d232c; color: var(--muted);
+    border: 1px solid var(--line); border-radius: 13px;
+    font: inherit; font-size: 11px; font-weight: 600; letter-spacing: .2px;
     cursor: pointer;
-    min-width: 86px;
+    transition: background .15s, color .15s, border-color .15s, transform .1s;
   }
-  button.toggle:hover:not(:disabled) { border-color: var(--accent); }
-  button.toggle:disabled { opacity: .45; cursor: default; }
-  button.toggle[data-on="1"] { background: #123c26; border-color: #1d5c3a; color: #7ff0ac; }
+  .power svg { width: 20px; height: 20px; }
+  .power:hover { border-color: #3a4453; color: var(--text); }
+  .power:active { transform: scale(.96); }
+  .power.on {
+    background: rgba(61, 220, 151, .12);
+    border-color: rgba(61, 220, 151, .38);
+    color: var(--green);
+  }
+  .power:disabled { opacity: .45; cursor: default; }
+
+  /* ---- empty ---- */
   .empty {
-    grid-column: 1 / -1; text-align: center; color: var(--muted);
-    padding: 60px 20px; line-height: 1.7;
+    grid-column: 1 / -1; text-align: center; padding: 80px 20px;
+    color: var(--muted); line-height: 1.8;
   }
-  .empty code { background: var(--panel); padding: 2px 6px; border-radius: 5px; }
+  .empty code {
+    background: var(--bg-2); border: 1px solid var(--line);
+    padding: 2px 7px; border-radius: 6px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13px;
+  }
+
+  /* ---- toast ---- */
   #toast {
-    position: fixed; left: 50%; bottom: 22px; transform: translateX(-50%) translateY(20px);
-    background: #2a1113; border: 1px solid #6b2a2f; color: #ffc4c8;
-    padding: 10px 16px; border-radius: 9px; font-size: 13px;
-    opacity: 0; pointer-events: none; transition: opacity .2s, transform .2s;
+    position: fixed; left: 50%; bottom: 24px;
+    transform: translate(-50%, 16px);
     max-width: min(90vw, 560px);
+    padding: 11px 16px;
+    background: #2a1417; border: 1px solid #5b2830; color: #ffc9ce;
+    border-radius: 11px; font-size: 13px;
+    opacity: 0; pointer-events: none;
+    transition: opacity .2s, transform .2s;
+    z-index: 10;
   }
-  #toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
-  footer { color: var(--muted); font-size: 12px; text-align: center; padding: 0 20px 30px; }
+  #toast.show { opacity: 1; transform: translate(-50%, 0); }
+
+  @media (max-width: 560px) {
+    header { padding: 16px 16px 12px; }
+    main { padding: 16px 16px 50px; grid-template-columns: 1fr; }
+    .search { width: 100%; margin-left: 0; }
+    .search input { width: 100%; }
+    .card { grid-template-columns: 52px 1fr auto; gap: 13px; padding: 14px; }
+    .orb { width: 52px; height: 52px; }
+    .power { width: 60px; }
+  }
 </style>
 </head>
 <body>
+
 <header>
-  <h1>WiZ bulbs</h1>
-  <span class="summary" id="summary">loading…</span>
-  <input id="filter" type="search" placeholder="Filter by MAC, IP or model" autocomplete="off">
+  <div class="bar">
+    <h1>
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none"
+           stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
+        <path d="M9 18h6M10 21h4"/>
+        <path d="M12 3a6 6 0 0 0-3.3 10.9c.5.4.8 1 .8 1.6V16h5v-.5c0-.6.3-1.2.8-1.6A6 6 0 0 0 12 3Z"/>
+      </svg>
+      Lights
+    </h1>
+
+    <label class="search">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none"
+           stroke="currentColor" stroke-width="2" stroke-linecap="round">
+        <circle cx="11" cy="11" r="7"/><path d="m20 20-3.2-3.2"/>
+      </svg>
+      <input id="filter" type="search" placeholder="Search name, model or IP"
+             autocomplete="off" spellcheck="false">
+    </label>
+  </div>
+
+  <div class="chips" id="chips">
+    <span class="chip active" data-filter="all">
+      <span class="dot ok"></span><b id="n-ok">0</b> connected
+    </span>
+    <span class="chip" data-filter="warn">
+      <span class="dot warn"></span><b id="n-warn">0</b> no response
+    </span>
+    <span class="chip" data-filter="offline">
+      <span class="dot"></span><b id="n-off">0</b> offline
+    </span>
+  </div>
 </header>
 
 <main id="grid"></main>
-
 <div id="toast" role="status"></div>
-<footer>Toggle switches a bulb instantly — use it to find which lamp is which. Bulbs that do not answer are shown greyed out.</footer>
 
 <script>
 "use strict";
 
 const state = {
   bulbs: [],
-  filter: "",
-  busy: new Set(),
+  text: "",
+  statusFilter: "all",
+  pending: new Set(),
   token: localStorage.getItem("wiz-token") || "",
   timer: null,
   loading: false
 };
 
 const grid = document.getElementById("grid");
-const summary = document.getElementById("summary");
 const toast = document.getElementById("toast");
 const filterInput = document.getElementById("filter");
+const counts = {
+  ok: document.getElementById("n-ok"),
+  warn: document.getElementById("n-warn"),
+  off: document.getElementById("n-off")
+};
 
-// ---- helpers ---------------------------------------------------------------
+// ---- api -------------------------------------------------------------------
 
-function toastError(message) {
-  toast.textContent = message;
-  toast.classList.add("show");
-  clearTimeout(toast._hide);
-  toast._hide = setTimeout(() => toast.classList.remove("show"), 4000);
-}
-
-// One retry, because a 401 may just mean the token prompt was cancelled before.
 async function api(path, options, retried) {
   const opts = Object.assign({}, options);
   opts.headers = Object.assign({}, opts.headers);
   if (state.token) opts.headers["Authorization"] = "Bearer " + state.token;
-
   const res = await fetch(path, opts);
   if (res.status === 401 && !retried) {
     const entered = prompt("This API needs a token (WIZ_API_TOKEN):");
@@ -170,6 +282,15 @@ async function api(path, options, retried) {
   }
   return res;
 }
+
+function toastError(message) {
+  toast.textContent = message;
+  toast.classList.add("show");
+  clearTimeout(toast._hide);
+  toast._hide = setTimeout(() => toast.classList.remove("show"), 4000);
+}
+
+// ---- colour ----------------------------------------------------------------
 
 function kelvinToRgb(kelvin) {
   const t = Math.max(1000, Math.min(12000, kelvin)) / 100;
@@ -187,10 +308,9 @@ function kelvinToRgb(kelvin) {
   return [c(r), c(g), c(b)];
 }
 
-function lightColor(bulb) {
-  if (!bulb.online) return ["#1a1d23", "transparent"];
-  if (!bulb.state) return ["#1c1f26", "transparent"];
-
+function orbColor(bulb) {
+  if (!bulb.present) return "#1d222b";
+  if (!bulb.state) return "#232833";
   let rgb;
   if (bulb.r != null && bulb.g != null && bulb.b != null &&
       (bulb.r + bulb.g + bulb.b) > 0) {
@@ -204,95 +324,119 @@ function lightColor(bulb) {
   } else {
     rgb = [255, 214, 160];
   }
-  const color = `rgb(${rgb.join(",")})`;
-  return [color, color];
+  const dim = (bulb.dimming == null ? 100 : Math.max(15, bulb.dimming)) / 100;
+  const mix = v => Math.round(v * dim);
+  return `rgb(${rgb.map(mix).join(",")})`;
 }
 
-// ---- rendering -------------------------------------------------------------
+// ---- status ----------------------------------------------------------------
 
-function describe(bulb) {
-  if (!bulb.online) return { label: "off-network", cls: "gone" };
-  return bulb.state
-    ? { label: "on", cls: "on" }
-    : { label: "off", cls: "off" };
+function statusOf(bulb) {
+  if (!bulb.present) return { key: "offline", label: "Offline", cls: "" };
+  if (!bulb.responsive) return { key: "warn", label: "No response", cls: "warn" };
+  return { key: "ok", label: "Connected", cls: "ok" };
 }
+
+function nameOf(bulb) {
+  return "WiZ " + bulb.mac.slice(-6);
+}
+
+// ---- render ----------------------------------------------------------------
 
 function render() {
-  const needle = state.filter.trim().toLowerCase();
-  const visible = state.bulbs.filter(b =>
-    !needle || `${b.mac} ${b.ip} ${b.model || ""}`.toLowerCase().includes(needle));
+  const text = state.text.trim().toLowerCase();
+  let bulbs = state.bulbs.filter(b =>
+    !text || `${nameOf(b)} ${b.mac} ${b.ip} ${b.model || ""}`.toLowerCase().includes(text));
 
-  const online = state.bulbs.filter(b => b.online).length;
-  summary.innerHTML =
-    `<b>${online}</b> online · ${state.bulbs.length} known in total`;
+  if (state.statusFilter !== "all") {
+    bulbs = bulbs.filter(b => statusOf(b).key === state.statusFilter);
+  }
+
+  const rank = b => statusOf(b).key === "ok" ? 0 : statusOf(b).key === "warn" ? 1 : 2;
+  bulbs = bulbs.slice().sort((a, b) =>
+    rank(a) - rank(b) ||
+    a.ip.localeCompare(b.ip, undefined, { numeric: true }));
+
+  const total = state.bulbs;
+  counts.ok.textContent = total.filter(b => statusOf(b).key === "ok").length;
+  counts.warn.textContent = total.filter(b => statusOf(b).key === "warn").length;
+  counts.off.textContent = total.filter(b => statusOf(b).key === "offline").length;
 
   grid.replaceChildren();
 
-  if (!visible.length) {
+  if (!bulbs.length) {
     const empty = document.createElement("div");
     empty.className = "empty";
-    empty.innerHTML = state.bulbs.length
-      ? "No bulb matches the filter."
-      : "No bulbs found yet.<br>Check <code>WIZ_SUBNET</code> and that the container can reach UDP 38899.";
+    empty.innerHTML = total.length
+      ? "Nothing matches this view."
+      : "No bulbs found yet.<br>Check <code>WIZ_SUBNET</code> and that the service can reach UDP 38899.";
     grid.append(empty);
     return;
   }
 
-  for (const bulb of visible) {
-    const card = document.createElement("article");
-    card.className = "card" + (bulb.online ? (bulb.state ? " on" : " off") : " offline");
-
-    const [swatch, glow] = lightColor(bulb);
-    card.style.setProperty("--swatch", swatch);
-    card.style.setProperty("--glow", glow);
-
-    const meta = document.createElement("div");
-    meta.className = "meta";
-
-    const mac = document.createElement("div");
-    mac.className = "mac";
-    const hex = bulb.mac.replace(/(..)(?=.)/g, "$1:");
-    mac.textContent = hex;
-
-    const sub = document.createElement("div");
-    sub.className = "sub";
-    sub.textContent = [bulb.ip, bulb.model].filter(Boolean).join(" · ");
-
-    const statusRow = document.createElement("div");
-    statusRow.className = "status";
-    const info = describe(bulb);
-    const pill = document.createElement("span");
-    pill.className = "pill " + info.cls;
-    pill.textContent = info.label;
-    statusRow.append(pill);
-
-    if (bulb.online && bulb.state && bulb.dimming != null) {
-      statusRow.append(document.createTextNode(`  ${bulb.dimming}%`));
-    }
-
-    meta.append(mac, sub, statusRow);
-
-    const button = document.createElement("button");
-    button.className = "toggle";
-    button.dataset.mac = bulb.mac;
-    button.dataset.on = bulb.online && bulb.state ? "1" : "0";
-    button.disabled = !bulb.online || state.busy.has(bulb.mac);
-    button.textContent = state.busy.has(bulb.mac)
-      ? "…"
-      : (!bulb.online ? "Offline" : (bulb.state ? "Turn off" : "Turn on"));
-    button.addEventListener("click", () => toggle(bulb.mac));
-
-    card.append(createSwatchWrap(swatch, glow), meta, button);
-    grid.append(card);
-  }
+  for (const bulb of bulbs) grid.append(card(bulb));
 }
 
-function createSwatchWrap(color, glow) {
-  const wrap = document.createElement("div");
-  wrap.className = "swatch";
-  wrap.style.background = color;
-  wrap.style.boxShadow = glow === "transparent" ? "" : `0 0 22px 2px ${glow}`;
-  return wrap;
+const POWER_SVG =
+  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" ' +
+  'stroke-width="1.9" stroke-linecap="round">' +
+  '<path d="M12 3v9"/><path d="M6.6 6.6a8 8 0 1 0 10.8 0"/></svg>';
+
+function card(bulb) {
+  const status = statusOf(bulb);
+  const el = document.createElement("article");
+  el.className = "card" + (status.key === "offline" ? " offline" : "");
+
+  const orb = document.createElement("div");
+  orb.className = "orb";
+  orb.style.setProperty("--orb", orbColor(bulb));
+
+  const info = document.createElement("div");
+  info.className = "info";
+
+  const name = document.createElement("div");
+  name.className = "name";
+  name.textContent = nameOf(bulb);
+
+  const model = document.createElement("div");
+  model.className = "model";
+  model.textContent = bulb.model || "WiZ bulb";
+
+  const addr = document.createElement("div");
+  addr.className = "addr";
+  addr.textContent = bulb.ip || "no address";
+
+  const line = document.createElement("div");
+  line.className = "state " + status.cls;
+  const dot = document.createElement("span");
+  dot.className = "dot " + status.cls;
+  line.append(dot, document.createTextNode(status.label));
+
+  if (status.key === "ok") {
+    const detail = document.createElement("span");
+    detail.className = "dim";
+    detail.textContent = bulb.state
+      ? "· on" + (bulb.dimming != null ? ` ${bulb.dimming}%` : "")
+      : "· off";
+    line.append(document.createTextNode(" "), detail);
+  } else if (status.key === "warn" && bulb.last_response_s != null) {
+    const detail = document.createElement("span");
+    detail.className = "dim";
+    detail.textContent = `· last reply ${bulb.last_response_s}s ago`;
+    line.append(document.createTextNode(" "), detail);
+  }
+
+  info.append(name, model, addr, line);
+
+  const button = document.createElement("button");
+  button.className = "power" + (bulb.state && bulb.present ? " on" : "");
+  button.disabled = !bulb.present || state.pending.has(bulb.mac);
+  button.innerHTML = POWER_SVG + "<span>" + (bulb.state ? "On" : "Off") + "</span>";
+  button.setAttribute("aria-label", bulb.state ? "Turn off" : "Turn on");
+  button.addEventListener("click", () => toggle(bulb));
+
+  el.append(orb, info, button);
+  return el;
 }
 
 // ---- data ------------------------------------------------------------------
@@ -304,10 +448,17 @@ async function load() {
     const res = await api("/bulbs?live=1");
     if (!res.ok) throw new Error("HTTP " + res.status);
     const data = await res.json();
-    state.bulbs = data.bulbs || [];
+    const previous = new Map(state.bulbs.map(b => [b.mac, b]));
+
+    state.bulbs = (data.bulbs || []).map(next => {
+      const old = previous.get(next.mac);
+      // Keep the optimistic state while a press is in flight.
+      if (old && state.pending.has(next.mac)) next.state = old.state;
+      return next;
+    });
     render();
   } catch (err) {
-    toastError("Could not load bulbs: " + err.message);
+    toastError("Could not load lights: " + err.message);
   } finally {
     state.loading = false;
     schedule();
@@ -320,30 +471,50 @@ function schedule() {
   state.timer = setTimeout(load, 5000);
 }
 
-async function toggle(mac) {
-  if (state.busy.has(mac)) return;
-  state.busy.add(mac);
+async function toggle(bulb) {
+  if (state.pending.has(bulb.mac) || !bulb.present) return;
+
+  const desired = !bulb.state;
+  bulb.state = desired;                  // optimistic, icon changes immediately
+  state.pending.add(bulb.mac);
   render();
+
   try {
-    const res = await api(`/bulb/${encodeURIComponent(mac)}/toggle`, { method: "POST" });
-    if (!res.ok) throw new Error(res.status === 503 ? "bulb is not reachable" : "HTTP " + res.status);
-    await load();
+    const res = await api(`/bulb/${encodeURIComponent(bulb.mac)}/toggle`, { method: "POST" });
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      throw new Error(res.status === 503 ? "no response from the bulb" : "HTTP " + res.status);
+    }
+    bulb.state = body.state;
   } catch (err) {
-    toastError("Toggle failed: " + err.message);
+    bulb.state = !desired;               // revert
+    toastError("Could not switch " + nameOf(bulb) + ": " + err.message);
   } finally {
-    state.busy.delete(mac);
+    state.pending.delete(bulb.mac);
     render();
   }
 }
 
+// ---- events ----------------------------------------------------------------
+
 filterInput.addEventListener("input", () => {
-  state.filter = filterInput.value;
+  state.text = filterInput.value;
+  render();
+});
+
+document.getElementById("chips").addEventListener("click", ev => {
+  const chip = ev.target.closest(".chip");
+  if (!chip) return;
+  state.statusFilter = chip.dataset.filter;
+  for (const c of document.querySelectorAll(".chip")) {
+    c.classList.toggle("active", c === chip);
+  }
   render();
 });
 
 document.addEventListener("visibilitychange", () => {
-  if (!document.hidden) load();
-  else clearTimeout(state.timer);
+  if (document.hidden) clearTimeout(state.timer);
+  else load();
 });
 
 load();

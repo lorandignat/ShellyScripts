@@ -11,6 +11,7 @@ Stdlib only. No dependencies.
 
 from __future__ import annotations
 
+import errno
 import ipaddress
 import json
 import logging
@@ -77,17 +78,24 @@ class Unreachable(Exception):
 class Registry:
     """MAC -> IP map plus the last known pilot fields, refreshed by a scanner."""
 
-    def __init__(self, hosts, scan_timeout, op_timeout, workers, interval, ttl):
+    def __init__(self, hosts, scan_timeout, op_timeout, workers, interval, ttl,
+                 probe_timeout=0.6, response_grace=30.0, presence_interval=5.0,
+                 presence_timeout=0.4):
         self.hosts = hosts
         self.scan_timeout = scan_timeout
         self.op_timeout = op_timeout
         self.workers = workers
         self.interval = interval
         self.ttl = ttl
+        self.probe_timeout = probe_timeout
+        self.response_grace = response_grace
+        self.presence_interval = presence_interval
+        self.presence_timeout = presence_timeout
         self.min_scan_gap = 3.0     # collapse bursts of failures into one scan
 
         self._lock = threading.Lock()
         self._scan_lock = threading.Lock()
+        self._presence_lock = threading.Lock()
         self._locks: dict[str, threading.Lock] = {}
         self._by_mac: dict[str, dict] = {}
         self._last_scan = 0.0
@@ -119,15 +127,16 @@ class Registry:
             self._last_scan = time.monotonic()
 
             online = {mac for mac, _, _ in found}
+            now = self._last_scan
             with self._lock:
                 for mac, ip, model in found:
                     entry = self._by_mac.get(mac, {})
                     entry.update(ip=ip, model=model or entry.get("model"),
-                                 last_seen=self._last_scan, online=True)
+                                 last_seen=now, present=True, last_present=now,
+                                 last_response=now, online=True)
                     self._by_mac[mac] = entry
-                for mac, entry in self._by_mac.items():
-                    if mac not in online:
-                        entry["online"] = False
+                # Absence is decided by the TCP presence sweep, not by one
+                # UDP sweep: a lost datagram must not make a bulb disappear.
 
             LOG.info("scan: %d/%d bulbs online in %.1fs",
                      len(found), len(self.hosts), time.monotonic() - started)
@@ -139,6 +148,65 @@ class Registry:
             except Exception:
                 LOG.exception("background scan failed")
             time.sleep(self.interval)
+
+    # ---- presence (LAN, not application level) ----------------------------
+
+    @staticmethod
+    def _host_up(ip: str, timeout: float) -> bool:
+        """True when something at `ip` answers TCP with a refusal or a connect.
+
+        WiZ bulbs refuse TCP 38899, which is enough to prove the device is on
+        the LAN even when it does not answer a UDP getPilot.
+        """
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+            sock.settimeout(timeout)
+            try:
+                rc = sock.connect_ex((ip, WIZ_PORT))
+            except OSError:
+                return False
+        return rc in (0, errno.ECONNREFUSED)
+
+    def check_presence(self, blocking: bool = True) -> None:
+        if not self._presence_lock.acquire(blocking=blocking):
+            return
+        try:
+            with self._lock:
+                targets = {m: e["ip"] for m, e in self._by_mac.items() if e.get("ip")}
+            if not targets:
+                return
+            macs = list(targets)
+            timeout = self.presence_timeout
+            with ThreadPoolExecutor(max_workers=min(64, len(macs))) as pool:
+                results = list(pool.map(
+                    lambda m: (m, self._host_up(targets[m], timeout)), macs))
+
+            now = time.monotonic()
+            lost: list[str] = []
+            with self._lock:
+                for mac, up in results:
+                    entry = self._by_mac.get(mac)
+                    if not entry:
+                        continue
+                    if up:
+                        entry["present"] = True
+                        entry["last_present"] = now
+                    else:
+                        if entry.get("present"):
+                            lost.append(mac)
+                        entry["present"] = False
+            if lost:
+                # The address may have moved; refresh the MAC map once.
+                self.scan(force=True)
+        finally:
+            self._presence_lock.release()
+
+    def presence_loop(self) -> None:
+        while True:
+            try:
+                self.check_presence()
+            except Exception:
+                LOG.exception("presence check failed")
+            time.sleep(self.presence_interval)
 
     # ---- lookups ----------------------------------------------------------
 
@@ -152,9 +220,17 @@ class Registry:
         with self._lock:
             rows = []
             for mac, entry in self._by_mac.items():
-                row = {k: v for k, v in entry.items() if k != "last_seen"}
+                present = bool(entry.get("present"))
+                last_ok = entry.get("last_response") or 0
+                row = {k: v for k, v in entry.items()
+                       if k not in ("last_seen", "last_present", "last_response")}
                 row["mac"] = mac
-                row["age_s"] = round(now - entry.get("last_seen", now))
+                row["online"] = present
+                row["present"] = present
+                row["responsive"] = present and (now - last_ok) <= self.response_grace
+                row["last_response_s"] = (round(now - entry["last_response"])
+                                          if entry.get("last_response") else None)
+                row["age_s"] = round(now - entry.get("last_present", now))
                 rows.append(row)
         return sorted(rows, key=lambda e: ipaddress.ip_address(e["ip"]))
 
@@ -163,29 +239,32 @@ class Registry:
         if force or not entry or not entry.get("ip"):
             self.scan(force=force)
             entry = self._entry(mac)
-            return entry["ip"] if entry and entry.get("online") else None
-
-        fresh = entry.get("online") and \
-            time.monotonic() - entry.get("last_seen", 0) <= self.ttl
-        if not fresh:
-            self.scan(force=False)          # rate-limited, often a no-op
-            entry = self._entry(mac) or entry
-        # An offline entry keeps its last IP: worth one cheap direct try.
-        return entry.get("ip")
-
-    def mark_offline(self, mac: str) -> None:
-        with self._lock:
-            if mac in self._by_mac:
-                self._by_mac[mac]["online"] = False
+            return entry["ip"] if entry and entry.get("present") else None
+        if entry.get("present"):
+            return entry.get("ip")
+        # Not seen by the last presence sweep: it may have just powered on, so
+        # one cheap TCP check decides. Bulbs refuse the port instantly; a dead
+        # address costs only `presence_timeout`.
+        if self._host_up(entry["ip"], self.presence_timeout):
+            now = time.monotonic()
+            with self._lock:
+                live = self._by_mac.get(mac)
+                if live:
+                    live["present"] = True
+                    live["last_present"] = now
+            return entry["ip"]
+        return None
 
     def _lock_for(self, mac: str) -> threading.Lock:
         with self._lock:
             return self._locks.setdefault(mac, threading.Lock())
 
     def _remember(self, mac: str, ip: str, pilot: dict) -> None:
+        now = time.monotonic()
         with self._lock:
             entry = self._by_mac.setdefault(mac, {})
-            entry.update(ip=ip, online=True, last_seen=time.monotonic())
+            entry.update(ip=ip, online=True, present=True,
+                         last_seen=now, last_present=now, last_response=now)
             for key in REPORTED:
                 if key in pilot:
                     entry[key] = pilot[key]
@@ -210,15 +289,14 @@ class Registry:
                 return ip, fn(ip)
             except (OSError, ValueError) as exc:
                 LOG.debug("%s at %s failed: %s", mac, ip, exc)
-                self.mark_offline(mac)
                 if attempt:
                     break
                 before = self._last_scan
                 self.scan(force=True)
                 if self._last_scan == before:
                     break              # rate-limited; nothing new to try
-                if not (self._entry(mac) or {}).get("online"):
-                    break              # scan says the bulb is really gone
+                if not (self._entry(mac) or {}).get("present"):
+                    break
         raise Unreachable(mac)
 
     def status(self, mac: str) -> dict:
@@ -255,27 +333,49 @@ class Registry:
             self._remember(mac, ip, {"state": new})
             return {"mac": mac, "ip": ip, "online": True, "state": new}
 
-    def live_entries(self) -> list[dict]:
-        """Live getPilot for every known bulb, in parallel, then the cache."""
-        with self._lock:
-            macs = [m for m, e in self._by_mac.items() if e.get("ip")]
-        if not macs:
-            return []
-        with ThreadPoolExecutor(max_workers=min(16, len(macs))) as pool:
-            list(pool.map(self._safe_status, macs))
-        return self.entries()
+    def probe(self, mac: str) -> bool:
+        """One cheap getPilot at the cached IP.
 
-    def _safe_status(self, mac: str) -> None:
+        Never scans and never touches LAN presence: presence is tracked by the
+        TCP sweep, so a missed UDP reply only means "no response", not offline.
+        """
+        entry = self._entry(mac)
+        if not entry or not entry.get("ip"):
+            return False
+
+        lock = self._lock_for(mac)
+        if not lock.acquire(blocking=False):
+            return bool(entry.get("present"))   # a toggle is using the bulb
         try:
-            self.status(mac)
-        except Exception:
-            pass
+            reply = wiz_call(entry["ip"], {"method": "getPilot"}, self.probe_timeout)
+        except (OSError, ValueError):
+            return False
+        else:
+            self._remember(mac, entry["ip"], reply.get("result", {}))
+            return True
+        finally:
+            lock.release()
+
+    def live_entries(self) -> list[dict]:
+        """Probe the bulbs that are currently on the LAN, then return the cache.
+
+        Presence is left to the background TCP sweep: doing it inline would
+        make the request wait for a TCP timeout and was the last source of
+        sluggish page loads.
+        """
+        with self._lock:
+            macs = [m for m, e in self._by_mac.items()
+                    if e.get("ip") and e.get("present")]
+        if macs:
+            with ThreadPoolExecutor(max_workers=min(32, len(macs))) as pool:
+                list(pool.map(self.probe, macs))
+        return self.entries()
 
 
 def make_handler(registry: Registry, token: str, ui: bytes):
     class Handler(BaseHTTPRequestHandler):
         protocol_version = "HTTP/1.1"
-        server_version = "wiz-bulb-api/1.1"
+        server_version = "wiz-bulb-api/1.3"
 
         # -- helpers --------------------------------------------------------
 
@@ -413,6 +513,10 @@ def main() -> None:
         workers=int(os.environ.get("WIZ_WORKERS", "64")),
         interval=float(os.environ.get("WIZ_SCAN_INTERVAL", "60")),
         ttl=float(os.environ.get("WIZ_CACHE_TTL", "180")),
+        probe_timeout=float(os.environ.get("WIZ_PROBE_TIMEOUT", "0.6")),
+        response_grace=float(os.environ.get("WIZ_RESPONSE_GRACE", "30")),
+        presence_interval=float(os.environ.get("WIZ_PRESENCE_INTERVAL", "5")),
+        presence_timeout=float(os.environ.get("WIZ_PRESENCE_TIMEOUT", "0.4")),
     )
 
     port = int(os.environ.get("WIZ_PORT", "8077"))
@@ -422,6 +526,7 @@ def main() -> None:
     server.daemon_threads = True
 
     threading.Thread(target=registry.refresh_loop, daemon=True).start()
+    threading.Thread(target=registry.presence_loop, daemon=True).start()
     LOG.info("listening on :%d, scanning %d hosts (%s)", port, len(hosts), subnet)
     try:
         server.serve_forever()

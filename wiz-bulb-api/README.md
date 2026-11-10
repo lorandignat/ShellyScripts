@@ -57,6 +57,9 @@ MACs are accepted in any form: `9877d50abae0`, `98:77:d5:0a:ba:e0`,
   "mac": "cc4085c78ad0",
   "ip": "192.168.1.144",
   "online": true,
+  "present": true,
+  "responsive": true,
+  "last_response_s": 1,
   "model": "ESP25_SHRGB_01",
   "state": true,
   "dimming": 80,
@@ -98,6 +101,10 @@ scanning is used); see the comment at the bottom of the file.
 | `WIZ_OP_TIMEOUT` | `1.5` | UDP timeout for a live request |
 | `WIZ_WORKERS` | `64` | parallel hosts during a scan |
 | `WIZ_CACHE_TTL` | `180` | how long a cached IP is trusted |
+| `WIZ_PROBE_TIMEOUT` | `0.6` | UDP timeout for live UI probes |
+| `WIZ_RESPONSE_GRACE` | `30` | seconds without a reply before "no response" |
+| `WIZ_PRESENCE_INTERVAL` | `5` | seconds between LAN presence sweeps |
+| `WIZ_PRESENCE_TIMEOUT` | `0.4` | TCP timeout for a presence check |
 | `WIZ_API_TOKEN` | – | if set, require `Authorization: Bearer <token>` |
 | `WIZ_LOG_LEVEL` | `INFO` | log verbosity |
 
@@ -111,6 +118,21 @@ scanning is used); see the comment at the bottom of the file.
 Bulbs are matched by MAC, so DHCP changing their address is handled
 automatically. No reservations needed. Forced rescans are rate-limited, so a
 burst of missing bulbs cannot turn into a scan storm.
+
+### Presence vs. response
+
+Two independent signals are tracked:
+
+- **LAN presence** — every 5 s the service opens a TCP connection to port 38899
+  on each known IP. A WiZ bulb refuses it, which proves the device is on the
+  network even when it is too busy to answer UDP. Not found = **offline
+  immediately**.
+- **Response** — `getPilot` over UDP. If a bulb is on the LAN but has not
+  answered for `WIZ_RESPONSE_GRACE` seconds (default 30), the UI shows
+  **no response** instead of flapping to offline.
+
+So a lost UDP packet only changes "Connected" to "No response"; only the TCP
+presence check can make a bulb disappear.
 
 ## Shelly integration
 
