@@ -26,7 +26,7 @@ services:
 
     # Known bulbs, categories and manual removals survive restarts.
     volumes:
-      - wiz-state:/data
+      - /homedir/data/wiz-bulb-api:/data
 
     read_only: true
     cap_drop: [ALL]
@@ -39,6 +39,3 @@ services:
 #
 #    ports:
 #      - "8077:8077"
-
-volumes:
-  wiz-state:

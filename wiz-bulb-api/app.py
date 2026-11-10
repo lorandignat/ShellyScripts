@@ -578,7 +578,7 @@ class Registry:
 def make_handler(registry: Registry, token: str, ui: bytes):
     class Handler(BaseHTTPRequestHandler):
         protocol_version = "HTTP/1.1"
-        server_version = "wiz-bulb-api/1.6"
+        server_version = "wiz-bulb-api/1.7"
 
         # -- helpers --------------------------------------------------------
 
@@ -642,7 +642,10 @@ def make_handler(registry: Registry, token: str, ui: bytes):
                 return self._json(200, {"ok": True})
             if parts == ["bulbs"] and method == "GET":
                 live = parse_qs(urlparse(self.path).query).get("live", ["0"])[0] not in ("0", "")
-                return self._json(200, {"bulbs": registry.live_entries() if live else registry.entries()})
+                bulbs = registry.live_entries() if live else registry.entries()
+                # One request gives the UI everything it needs.
+                return self._json(200, {"bulbs": bulbs,
+                                        "categories": registry.category_counts()})
             if parts == ["api"]:
                 return self._json(200, {
                     "service": "wiz-bulb-api",

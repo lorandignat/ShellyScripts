@@ -18,6 +18,9 @@ class FakeRegistry:
     def live_entries(self):
         return self.entries()
 
+    def category_counts(self):
+        return [{"id": "c1", "name": "Bedroom", "count": 1}]
+
     def status(self, mac):
         if mac != "9877d50abae0":
             raise app.Unreachable(mac)
@@ -76,6 +79,7 @@ class ApiTest(unittest.TestCase):
         code, body = self.request("/bulbs?live=1")
         self.assertEqual(code, 200)
         self.assertEqual(body["bulbs"][0]["mac"], "9877d50abae0")
+        self.assertEqual(body["categories"][0]["name"], "Bedroom")
 
     def test_toggle(self):
         code, body = self.request("/bulb/9877D50ABAE0/toggle", "POST")

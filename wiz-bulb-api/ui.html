@@ -4,374 +4,660 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="dark">
-<title>Lights</title>
+<meta name="theme-color" content="#050912">
+<title>Wiz Lights</title>
 <style>
   :root {
-    --bg: #0c0e12;
-    --bg-2: #11141a;
-    --card: #171b22;
-    --card-hover: #1c212a;
-    --line: #262c36;
-    --line-soft: #1f242c;
-    --text: #eef2f7;
-    --muted: #8b95a4;
-    --muted-2: #5f6875;
-    --green: #3ddc97;
-    --amber: #f5b544;
-    --grey: #6a7381;
-    --accent: #5aa9ff;
-    --radius: 16px;
+    --text: #f2f5fa;
+    --muted: #9aa6bb;
+    --muted-2: #66738a;
+    --line: rgba(255, 255, 255, .10);
+    --line-2: rgba(255, 255, 255, .16);
+    --glass: rgba(16, 23, 38, .58);
+    --glass-2: rgba(24, 33, 52, .55);
+    --green: #59e3a7;
+    --amber: #f2bd63;
+    --grey: #7a879c;
+    --blue: #7fb6ff;
+    --radius: 22px;
   }
+
   * { box-sizing: border-box; }
-  html, body { height: 100%; }
+  html, body { min-height: 100%; }
   body {
     margin: 0;
-    background:
-      radial-gradient(1100px 500px at 15% -10%, #16202c 0%, transparent 60%),
-      radial-gradient(900px 500px at 100% 0%, #1a1620 0%, transparent 55%),
-      var(--bg);
     color: var(--text);
-    font: 15px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Roboto, sans-serif;
+    font: 15px/1.45 -apple-system, BlinkMacSystemFont, "SF Pro Display",
+          "Segoe UI", Inter, Roboto, sans-serif;
     -webkit-font-smoothing: antialiased;
+    background: #050912;
+    overflow-x: hidden;
+    isolation: isolate;
   }
 
-  /* ---- header ---- */
-  header {
-    position: sticky; top: 0; z-index: 5;
-    padding: 18px 22px 14px;
-    background: rgba(12, 14, 18, .82);
-    backdrop-filter: blur(14px);
-    border-bottom: 1px solid var(--line-soft);
+  /* ---------- night scene ---------- */
+  .scene {
+    position: fixed; inset: 0; z-index: -2; overflow: hidden;
+    pointer-events: none;
   }
-  .bar {
-    display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
-    max-width: 1480px; margin: 0 auto;
+  .scene svg { width: 100%; height: 100%; display: block; }
+  .scene::after {
+    content: "";
+    position: absolute; inset: 0;
+    background:
+      radial-gradient(1200px 520px at 78% 8%, rgba(120, 150, 210, .16), transparent 62%),
+      radial-gradient(900px 500px at 12% 92%, rgba(36, 82, 96, .20), transparent 65%),
+      linear-gradient(180deg, rgba(4, 7, 14, .30), rgba(4, 7, 14, .10) 40%, rgba(4, 7, 14, .55));
+  }
+  .stars { animation: twinkle 7s ease-in-out infinite; transform-origin: center; }
+  .stars-2 { animation-delay: 2.8s; }
+  @keyframes twinkle {
+    0%, 100% { opacity: .75; }
+    50% { opacity: 1; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .stars, .stars-2 { animation: none; }
+  }
+
+  /* ---------- layout ---------- */
+  .shell {
+    width: min(1440px, calc(100% - 44px));
+    margin: 0 auto;
+    padding: 26px 0 70px;
+  }
+
+  /* ---------- header ---------- */
+  header.top {
+    display: flex; align-items: center; gap: 18px; flex-wrap: wrap;
+    padding: 6px 4px 20px;
+  }
+  .brand { display: flex; align-items: center; gap: 13px; min-width: 0; }
+  .brand .mark {
+    width: 44px; height: 44px; flex: none;
+    display: grid; place-items: center;
+    border-radius: 50%;
+    background:
+      radial-gradient(circle at 32% 24%, rgba(255, 255, 255, .20), transparent 55%),
+      linear-gradient(160deg, rgba(255, 214, 150, .22), rgba(90, 140, 220, .10));
+    border: 1px solid rgba(255, 255, 255, .16);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, .28), 0 10px 28px rgba(0, 0, 0, .35);
+    color: #ffd9a0;
   }
   h1 {
-    margin: 0; font-size: 21px; font-weight: 650; letter-spacing: -.2px;
-    display: flex; align-items: center; gap: 10px;
+    margin: 0; font-size: 22px; font-weight: 650; letter-spacing: -.02em;
+    text-shadow: 0 2px 18px rgba(0, 0, 0, .5);
+    white-space: nowrap;
   }
-  h1 svg { color: var(--amber); }
-  .search {
-    margin-left: auto; position: relative; min-width: 220px;
+  .sub {
+    margin: 1px 0 0; color: var(--muted); font-size: 12.5px;
+    white-space: nowrap;
   }
-  .search input {
-    width: 100%; padding: 9px 12px 9px 34px;
-    background: var(--bg-2); color: var(--text);
-    border: 1px solid var(--line); border-radius: 10px;
-    font: inherit; font-size: 14px;
-    transition: border-color .15s, box-shadow .15s;
+
+  .tools {
+    margin-left: auto; display: flex; align-items: center; gap: 10px;
+    flex-wrap: wrap;
   }
-  .search input:focus {
-    outline: none; border-color: #3a4658;
-    box-shadow: 0 0 0 3px rgba(90, 169, 255, .12);
-  }
+  .search { position: relative; min-width: 230px; }
   .search svg {
-    position: absolute; left: 10px; top: 50%; transform: translateY(-50%);
+    position: absolute; left: 13px; top: 50%; transform: translateY(-50%);
     color: var(--muted-2); pointer-events: none;
   }
-  .chips {
-    display: flex; gap: 8px; flex-wrap: wrap;
-    max-width: 1480px; margin: 12px auto 0;
+  .search input {
+    width: 100%; padding: 10px 14px 10px 37px;
+    color: var(--text); font: inherit; font-size: 13.5px;
+    background: rgba(12, 18, 30, .55);
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    backdrop-filter: blur(16px);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, .07);
+    transition: border-color .2s, box-shadow .2s, background .2s;
   }
-  .chip {
+  .search input::placeholder { color: var(--muted-2); }
+  .search input:focus {
+    outline: none;
+    border-color: rgba(150, 190, 255, .38);
+    background: rgba(16, 23, 38, .7);
+    box-shadow: 0 0 0 4px rgba(110, 160, 255, .10), inset 0 1px 0 rgba(255, 255, 255, .08);
+  }
+
+  /* ---------- liquid buttons ---------- */
+  .liquid {
+    position: relative;
+    display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+    padding: 10px 17px;
+    color: var(--text); font: inherit; font-size: 13.5px; font-weight: 600;
+    border: 1px solid rgba(255, 255, 255, .14);
+    border-radius: 999px;
+    cursor: pointer;
+    background:
+      linear-gradient(180deg, rgba(255, 255, 255, .17), rgba(255, 255, 255, .045) 46%, rgba(255, 255, 255, .015));
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, .26),
+      inset 0 -10px 20px rgba(0, 0, 0, .16),
+      0 12px 26px rgba(2, 6, 16, .42);
+    backdrop-filter: blur(18px);
+    transition: transform .16s cubic-bezier(.2, .8, .2, 1),
+                box-shadow .16s, border-color .16s, background .16s;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .liquid:hover {
+    transform: translateY(-1px);
+    border-color: rgba(255, 255, 255, .24);
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, .32),
+      inset 0 -10px 20px rgba(0, 0, 0, .14),
+      0 16px 34px rgba(2, 6, 16, .5);
+  }
+  .liquid:active { transform: scale(.965); }
+  .liquid:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 3px rgba(127, 182, 255, .35),
+                inset 0 1px 0 rgba(255, 255, 255, .3);
+  }
+  .liquid svg { opacity: .9; }
+
+  /* ---------- toolbar ---------- */
+  .toolbar {
+    position: relative;
+    display: flex; align-items: center; gap: 16px;
+    margin-bottom: 22px; padding: 10px 12px 10px 16px;
+    border-radius: 20px;
+    background: linear-gradient(180deg, rgba(20, 28, 45, .55), rgba(13, 19, 32, .42));
+    border: 1px solid var(--line);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, .07), 0 20px 44px rgba(2, 6, 16, .35);
+    backdrop-filter: blur(20px);
+  }
+
+  .tabs {
+    display: flex; align-items: center; gap: 2px;
+    overflow-x: auto; scrollbar-width: none;
+    flex: 1 1 auto; min-width: 0;
+  }
+  .tabs::-webkit-scrollbar { display: none; }
+  .tab {
+    position: relative;
     display: inline-flex; align-items: center; gap: 7px;
-    padding: 6px 11px; border-radius: 999px;
-    background: var(--bg-2); border: 1px solid var(--line);
-    color: var(--muted); font-size: 13px; font-weight: 550;
-    cursor: pointer; user-select: none;
-    transition: border-color .15s, color .15s, background .15s;
+    padding: 8px 13px; border-radius: 13px;
+    color: var(--muted); font-size: 13.5px; font-weight: 550;
+    background: none; border: 1px solid transparent;
+    cursor: pointer; white-space: nowrap;
+    transition: color .16s, background .16s, border-color .16s;
   }
-  .chip:hover { border-color: #36404f; color: var(--text); }
-  .chip.active { border-color: #3c4b60; background: #1a212b; color: var(--text); }
-  .chip b { color: var(--text); font-weight: 650; }
-  .dot {
-    width: 7px; height: 7px; border-radius: 50%; background: var(--grey);
-    flex: none;
+  .tab:hover { color: var(--text); background: rgba(255, 255, 255, .04); }
+  .tab.active {
+    color: var(--text);
+    background:
+      linear-gradient(180deg, rgba(255, 255, 255, .13), rgba(255, 255, 255, .03));
+    border-color: rgba(255, 255, 255, .12);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, .18), 0 8px 20px rgba(2, 6, 16, .3);
   }
-  .dot.ok { background: var(--green); }
-  .dot.warn { background: var(--amber); }
-
-  .cats { margin-top: 8px; }
-  .chip .count { color: var(--muted-2); font-weight: 550; }
-  .cat-del {
+  .tab .num {
+    color: var(--muted-2); font-size: 11.5px; font-weight: 600;
+    padding: 1px 6px; border-radius: 999px;
+    background: rgba(255, 255, 255, .06);
+  }
+  .tab.active .num { color: var(--text); background: rgba(255, 255, 255, .10); }
+  .tab.del { padding-right: 7px; }
+  .tab .x {
     display: inline-grid; place-items: center;
-    width: 17px; height: 17px; margin-left: 1px;
-    background: none; border: 0; border-radius: 50%;
-    color: var(--muted-2); font: inherit; font-size: 14px; line-height: 1;
+    width: 16px; height: 16px; margin-left: -1px;
+    border: 0; border-radius: 50%;
+    background: none; color: var(--muted-2);
+    font: inherit; font-size: 13px; line-height: 1;
     cursor: pointer;
   }
-  .cat-del:hover { background: #33202a; color: #ff9aa6; }
-  .chip.new {
-    border-style: dashed; color: var(--muted-2);
+  .tab .x:hover { background: rgba(255, 120, 140, .16); color: #ffb3be; }
+  .tab.add {
+    color: var(--muted-2);
+    border: 1px dashed rgba(255, 255, 255, .13);
+    border-radius: 12px;
   }
-  .chip.new:hover { color: var(--text); }
+  .tab.add:hover { color: var(--text); border-color: rgba(255, 255, 255, .24); }
 
-  .catrow { margin-top: 8px; display: flex; align-items: center; gap: 6px; }
-  .cat-select {
-    max-width: 100%;
-    padding: 4px 8px;
-    background: var(--bg-2); color: var(--muted);
-    border: 1px solid var(--line); border-radius: 7px;
-    font: inherit; font-size: 12px;
+  .statuses {
+    display: flex; align-items: center; gap: 4px;
+    flex: none;
+    padding-left: 14px; margin-left: 1px;
+    border-left: 1px solid var(--line);
+  }
+  .status {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 7px 10px; border-radius: 999px;
+    background: none; border: 1px solid transparent;
+    color: var(--muted); font: inherit; font-size: 12px; font-weight: 550;
     cursor: pointer;
+    transition: color .16s, background .16s, border-color .16s;
   }
-  .cat-select:hover { color: var(--text); border-color: #36404f; }
-  .cat-select:focus { outline: none; border-color: #3a4658; }
-
-  .remove-btn {
-    margin-left: 4px; padding: 1px 7px;
-    background: none; border: 1px solid #3a2630; border-radius: 6px;
-    color: #d98a97; font: inherit; font-size: 11.5px;
-    cursor: pointer;
+  .status:hover { color: var(--text); }
+  .status.active {
+    color: var(--text); background: rgba(255, 255, 255, .07);
+    border-color: rgba(255, 255, 255, .10);
   }
-  .remove-btn:hover { border-color: #6b3444; color: #ffb3be; }
+  .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--grey); flex: none; }
+  .dot.ok { background: var(--green); box-shadow: 0 0 9px rgba(89, 227, 167, .55); }
+  .dot.warn { background: var(--amber); box-shadow: 0 0 9px rgba(242, 189, 99, .45); }
 
-  /* ---- grid ---- */
+  /* ---------- cards ---------- */
   main {
-    max-width: 1480px; margin: 0 auto;
-    padding: 20px 22px 60px;
-    display: grid; gap: 14px;
-    grid-template-columns: repeat(auto-fill, minmax(330px, 1fr));
+    display: grid; gap: 16px;
+    grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
   }
-
-  /* ---- card ---- */
   .card {
     position: relative;
-    display: grid;
-    grid-template-columns: 58px 1fr auto;
-    align-items: center; gap: 15px;
-    padding: 16px 16px 16px 17px;
-    background: linear-gradient(180deg, var(--card), #14171d);
-    border: 1px solid var(--line);
+    display: grid; grid-template-columns: 60px minmax(0, 1fr) auto;
+    align-items: center; gap: 16px;
+    padding: 18px;
     border-radius: var(--radius);
-    transition: background .15s, border-color .15s, transform .12s;
+    background:
+      linear-gradient(180deg, rgba(22, 31, 49, .62), rgba(12, 18, 30, .52));
+    border: 1px solid var(--line);
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, .07),
+      0 18px 40px rgba(2, 6, 16, .38);
+    backdrop-filter: blur(18px);
+    transition: border-color .2s, transform .2s cubic-bezier(.2, .8, .2, 1), box-shadow .2s;
   }
-  .card:hover { background: var(--card-hover); border-color: #303845; }
-  .card.offline { opacity: .5; }
+  .card:hover {
+    transform: translateY(-2px);
+    border-color: var(--line-2);
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, .09),
+      0 24px 52px rgba(2, 6, 16, .5);
+  }
+  .card.offline { opacity: .55; }
   .card.offline:hover { transform: none; }
 
   .orb {
-    width: 58px; height: 58px; border-radius: 50%;
-    background: var(--orb, #232833);
-    border: 1px solid rgba(255, 255, 255, .08);
-    box-shadow: inset 0 -8px 16px rgba(0, 0, 0, .35), inset 0 1px 0 rgba(255, 255, 255, .14);
-    transition: background .3s;
+    width: 60px; height: 60px; border-radius: 50%;
+    background: var(--orb, #1b2233);
+    border: 1px solid rgba(255, 255, 255, .10);
+    box-shadow:
+      inset 0 -10px 20px rgba(0, 0, 0, .42),
+      inset 0 2px 0 rgba(255, 255, 255, .18),
+      0 10px 22px rgba(2, 6, 16, .35);
+    transition: background .4s;
   }
 
   .info { min-width: 0; }
   .name {
+    font-size: 15.5px; font-weight: 650; letter-spacing: -.01em;
     display: flex; align-items: center; gap: 8px;
-    font-size: 15px; font-weight: 650; letter-spacing: -.1px;
   }
   .model {
-    margin-top: 2px;
-    color: var(--muted); font-size: 12.5px;
+    margin-top: 2px; color: var(--muted); font-size: 12px;
     overflow-wrap: anywhere;
   }
   .addr {
-    margin-top: 2px;
-    display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
-    color: var(--muted-2); font-size: 12px;
+    margin-top: 3px; display: flex; align-items: center; gap: 7px; flex-wrap: wrap;
+    color: var(--muted-2); font-size: 11.5px;
     font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   }
-  .mac {
-    padding: 1px 6px; margin: 0;
-    background: var(--bg-2); color: var(--muted);
-    border: 1px solid var(--line); border-radius: 6px;
-    font: inherit; font-size: 11.5px; letter-spacing: .1px;
-    cursor: pointer;
-    transition: border-color .15s, color .15s;
+  .addr .sep { opacity: .5; }
+  .addr .mac {
+    padding: 0; margin: 0; border: 0; background: none;
+    color: inherit; font: inherit; letter-spacing: .02em;
+    cursor: copy;
+    transition: color .16s;
   }
-  .mac:hover { border-color: #3a4453; color: var(--text); }
+  .addr .mac:hover { color: rgba(242, 245, 250, .8); }
 
-  /* ---- api docs ---- */
-  .api-btn {
-    display: inline-flex; align-items: center; gap: 7px;
-    padding: 9px 13px;
-    background: var(--bg-2); color: var(--muted);
-    border: 1px solid var(--line); border-radius: 10px;
-    font: inherit; font-size: 13px; font-weight: 600;
-    cursor: pointer;
-    transition: border-color .15s, color .15s;
+  .state {
+    margin-top: 8px;
+    display: flex; align-items: center; gap: 7px;
+    color: var(--muted); font-size: 12px;
   }
-  .api-btn:hover { border-color: #3a4453; color: var(--text); }
+  .state.ok { color: rgba(89, 227, 167, .85); }
+  .state.warn { color: rgba(242, 189, 99, .9); }
+  .state .dim { color: var(--muted-2); }
+  .state .remove {
+    margin-left: auto; padding: 0;
+    border: 0; background: none;
+    color: rgba(255, 150, 165, .75); font: inherit; font-size: 11.5px;
+    text-decoration: underline; text-underline-offset: 2px;
+    cursor: pointer;
+  }
+  .state .remove:hover { color: #ffb3be; }
 
+  .cat {
+    margin-top: 7px; display: flex; align-items: center; gap: 6px;
+    color: var(--muted-2);
+  }
+  .cat svg { flex: none; opacity: .65; }
+  .cat select {
+    appearance: none; -webkit-appearance: none;
+    max-width: 170px;
+    padding: 2px 16px 2px 0;
+    border: 0; background: transparent;
+    color: var(--muted); font: inherit; font-size: 12px;
+    cursor: pointer;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='9' height='6' viewBox='0 0 9 6'%3E%3Cpath d='M1 1l3.5 3.5L8 1' fill='none' stroke='%2366738a' stroke-width='1.4' stroke-linecap='round'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right center;
+  }
+  .cat select:hover { color: var(--text); }
+  .cat select:focus { outline: none; color: var(--text); }
+  .cat select option { background: #121a29; color: var(--text); }
+
+  /* tvOS-ish power pill */
+  .power {
+    display: inline-flex; align-items: center; gap: 9px;
+    padding: 11px 16px 11px 14px;
+    border-radius: 999px;
+    color: rgba(235, 242, 252, .78);
+    font: inherit; font-size: 12.5px; font-weight: 650; letter-spacing: .01em;
+    border: 1px solid rgba(255, 255, 255, .14);
+    background:
+      linear-gradient(180deg, rgba(255, 255, 255, .16), rgba(255, 255, 255, .03) 48%, rgba(255, 255, 255, .01));
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, .28),
+      inset 0 -10px 18px rgba(0, 0, 0, .20),
+      0 12px 26px rgba(2, 6, 16, .40);
+    cursor: pointer;
+    transition: transform .16s cubic-bezier(.2, .8, .2, 1), box-shadow .16s,
+                border-color .16s, color .16s, background .16s;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .power svg { width: 18px; height: 18px; opacity: .9; }
+  .power:hover {
+    transform: translateY(-1px);
+    color: var(--text);
+    border-color: rgba(255, 255, 255, .24);
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, .34),
+      inset 0 -10px 18px rgba(0, 0, 0, .18),
+      0 16px 32px rgba(2, 6, 16, .48);
+  }
+  .power:active { transform: scale(.96); }
+  .power.on {
+    color: #dffbef;
+    border-color: rgba(89, 227, 167, .40);
+    background:
+      linear-gradient(180deg, rgba(89, 227, 167, .30), rgba(42, 140, 102, .16) 50%, rgba(20, 60, 46, .10));
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, .34),
+      inset 0 -10px 20px rgba(11, 61, 42, .30),
+      0 12px 30px rgba(22, 120, 84, .35);
+  }
+  .power:disabled { opacity: .35; cursor: default; transform: none; }
+
+  /* ---------- empty ---------- */
+  .empty {
+    grid-column: 1 / -1; text-align: center; padding: 90px 20px;
+    color: var(--muted); line-height: 1.9;
+  }
+  .empty code {
+    background: rgba(255, 255, 255, .06); border: 1px solid var(--line);
+    padding: 2px 7px; border-radius: 7px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12.5px;
+  }
+
+  /* ---------- toast ---------- */
+  #toast {
+    position: fixed; left: 50%; bottom: 26px;
+    transform: translate(-50%, 18px);
+    max-width: min(90vw, 560px);
+    padding: 12px 18px;
+    border-radius: 14px;
+    font-size: 13px;
+    color: #ffd3d8;
+    background: rgba(52, 20, 26, .85);
+    border: 1px solid rgba(255, 120, 140, .28);
+    box-shadow: 0 18px 44px rgba(0, 0, 0, .5);
+    backdrop-filter: blur(18px);
+    opacity: 0; pointer-events: none;
+    transition: opacity .2s, transform .2s;
+    z-index: 30;
+  }
+  #toast.show { opacity: 1; transform: translate(-50%, 0); }
+  #toast.ok {
+    color: #bdf7da;
+    background: rgba(16, 44, 34, .85);
+    border-color: rgba(89, 227, 167, .30);
+  }
+
+  /* ---------- docs ---------- */
   .modal {
-    position: fixed; inset: 0; z-index: 20;
-    display: grid; place-items: center; padding: 20px;
-    background: rgba(5, 7, 10, .72);
-    backdrop-filter: blur(3px);
+    position: fixed; inset: 0; z-index: 40;
+    display: grid; place-items: center; padding: 22px;
+    background: rgba(3, 6, 12, .68);
+    backdrop-filter: blur(6px);
   }
   .modal[hidden] { display: none; }
   .sheet {
-    width: min(760px, 100%); max-height: 86vh; overflow: auto;
-    background: var(--card); border: 1px solid var(--line);
-    border-radius: 18px; padding: 22px 24px 26px;
-    box-shadow: 0 30px 80px rgba(0, 0, 0, .55);
+    width: min(720px, 100%); max-height: 86vh; overflow: auto;
+    padding: 24px 26px 28px;
+    border-radius: 24px;
+    background: linear-gradient(180deg, rgba(24, 33, 52, .96), rgba(13, 19, 32, .96));
+    border: 1px solid var(--line-2);
+    box-shadow: 0 40px 100px rgba(0, 0, 0, .65);
   }
-  .sheet-head {
-    display: flex; align-items: center; gap: 12px; margin-bottom: 4px;
-  }
+  .sheet-head { display: flex; align-items: center; gap: 12px; }
   .sheet-head h2 { margin: 0; font-size: 18px; font-weight: 650; }
   .sheet-head .close {
-    margin-left: auto; width: 34px; height: 34px;
+    margin-left: auto; width: 36px; height: 36px;
     display: grid; place-items: center;
-    background: var(--bg-2); color: var(--muted);
-    border: 1px solid var(--line); border-radius: 10px;
-    font: inherit; font-size: 17px; cursor: pointer;
+    border-radius: 50%;
+    border: 1px solid var(--line);
+    background: rgba(255, 255, 255, .05);
+    color: var(--muted); font-size: 18px; cursor: pointer;
   }
   .sheet-head .close:hover { color: var(--text); }
-  .sheet p { color: var(--muted); font-size: 13px; margin: 8px 0; }
-  .sheet table {
-    width: 100%; border-collapse: collapse; margin: 14px 0 6px;
-    font-size: 13px;
+  .sheet p { color: var(--muted); font-size: 13px; }
+  .sheet h3 {
+    margin: 22px 0 4px; font-size: 11.5px; font-weight: 650;
+    color: var(--muted-2); text-transform: uppercase; letter-spacing: .9px;
   }
-  .sheet th {
-    text-align: left; color: var(--muted-2); font-size: 11.5px;
-    text-transform: uppercase; letter-spacing: .7px;
-    padding: 6px 10px; border-bottom: 1px solid var(--line);
-  }
+  .sheet table { width: 100%; border-collapse: collapse; font-size: 13px; }
   .sheet td {
-    padding: 8px 10px; border-bottom: 1px solid var(--line-soft);
+    padding: 9px 8px; border-bottom: 1px solid rgba(255, 255, 255, .06);
     vertical-align: top;
   }
   .sheet td:first-child {
-    white-space: nowrap; color: var(--accent);
-    font-weight: 650; font-size: 12px;
-  }
-  .sheet code, .sheet pre {
+    white-space: nowrap; color: var(--blue);
     font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 11.5px; width: 1%;
   }
   .sheet code {
-    background: var(--bg-2); border: 1px solid var(--line);
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    background: rgba(255, 255, 255, .06);
+    border: 1px solid var(--line);
     padding: 1px 6px; border-radius: 6px; font-size: 12px;
     overflow-wrap: anywhere;
   }
   .sheet pre {
-    background: var(--bg-2); border: 1px solid var(--line);
-    border-radius: 10px; padding: 12px 14px; overflow: auto;
-    font-size: 12px; line-height: 1.6; color: #cdd6e3;
-  }
-  .sheet h3 {
-    margin: 20px 0 6px; font-size: 13px; font-weight: 650;
-    color: var(--muted-2); text-transform: uppercase; letter-spacing: .7px;
-  }
-  .state {
-    margin-top: 7px;
-    display: flex; align-items: center; gap: 7px;
-    color: var(--muted); font-size: 12.5px;
-  }
-  .state .dot { width: 6px; height: 6px; }
-  .state.warn { color: var(--amber); }
-  .state.ok { color: var(--green); }
-  .state .dim { color: var(--muted-2); }
-
-  .power {
-    display: grid; place-items: center; gap: 4px;
-    width: 68px; padding: 10px 0 8px;
-    background: #1d232c; color: var(--muted);
-    border: 1px solid var(--line); border-radius: 13px;
-    font: inherit; font-size: 11px; font-weight: 600; letter-spacing: .2px;
-    cursor: pointer;
-    transition: background .15s, color .15s, border-color .15s, transform .1s;
-  }
-  .power svg { width: 20px; height: 20px; }
-  .power:hover { border-color: #3a4453; color: var(--text); }
-  .power:active { transform: scale(.96); }
-  .power.on {
-    background: rgba(61, 220, 151, .12);
-    border-color: rgba(61, 220, 151, .38);
-    color: var(--green);
-  }
-  .power:disabled { opacity: .45; cursor: default; }
-
-  /* ---- empty ---- */
-  .empty {
-    grid-column: 1 / -1; text-align: center; padding: 80px 20px;
-    color: var(--muted); line-height: 1.8;
-  }
-  .empty code {
-    background: var(--bg-2); border: 1px solid var(--line);
-    padding: 2px 7px; border-radius: 6px;
-    font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13px;
+    margin: 10px 0 0; padding: 14px 16px;
+    border-radius: 14px;
+    background: rgba(5, 9, 17, .75);
+    border: 1px solid var(--line);
+    color: #c8d4e6; font-size: 12px; line-height: 1.65;
+    overflow: auto;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   }
 
-  /* ---- toast ---- */
-  #toast {
-    position: fixed; left: 50%; bottom: 24px;
-    transform: translate(-50%, 16px);
-    max-width: min(90vw, 560px);
-    padding: 11px 16px;
-    background: #2a1417; border: 1px solid #5b2830; color: #ffc9ce;
-    border-radius: 11px; font-size: 13px;
-    opacity: 0; pointer-events: none;
-    transition: opacity .2s, transform .2s;
-    z-index: 10;
+  /* ---------- responsive ---------- */
+  @media (max-width: 860px) {
+    .shell { width: calc(100% - 28px); padding-top: 18px; }
+    .toolbar { flex-wrap: wrap; gap: 8px; padding: 10px 12px; }
+    .tabs { flex-basis: 100%; }
+    .statuses {
+      border-left: 0; padding-left: 0; margin-left: 0;
+      width: 100%; justify-content: flex-start;
+      border-top: 1px solid var(--line); padding-top: 8px;
+    }
+    .tools { width: 100%; }
+    .search { flex: 1 1 200px; }
   }
-  #toast.show { opacity: 1; transform: translate(-50%, 0); }
-  #toast.ok {
-    background: #12241c; border-color: #25543e; color: #b8f5d4;
-  }
-
   @media (max-width: 560px) {
-    header { padding: 16px 16px 12px; }
-    main { padding: 16px 16px 50px; grid-template-columns: 1fr; }
-    .search { width: 100%; margin-left: 0; }
-    .search input { width: 100%; }
-    .card { grid-template-columns: 52px 1fr auto; gap: 13px; padding: 14px; }
+    h1 { font-size: 20px; }
+    main { grid-template-columns: 1fr; }
+    .card { grid-template-columns: 52px minmax(0, 1fr) auto; gap: 13px; padding: 15px; }
     .orb { width: 52px; height: 52px; }
-    .power { width: 60px; }
+    .power { padding: 10px 13px; }
+    .power .lbl { display: none; }
   }
 </style>
 </head>
 <body>
 
-<header>
-  <div class="bar">
-    <h1>
-      <svg width="22" height="22" viewBox="0 0 24 24" fill="none"
-           stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
-        <path d="M9 18h6M10 21h4"/>
-        <path d="M12 3a6 6 0 0 0-3.3 10.9c.5.4.8 1 .8 1.6V16h5v-.5c0-.6.3-1.2.8-1.6A6 6 0 0 0 12 3Z"/>
-      </svg>
-      Lights
-    </h1>
+<div class="scene" aria-hidden="true">
+  <svg viewBox="0 0 1920 1080" preserveAspectRatio="xMidYMid slice">
+    <defs>
+      <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0" stop-color="#050912"/>
+        <stop offset=".42" stop-color="#0b1730"/>
+        <stop offset=".72" stop-color="#132743"/>
+        <stop offset="1" stop-color="#0a1422"/>
+      </linearGradient>
+      <radialGradient id="moon" cx=".5" cy=".5" r=".5">
+        <stop offset="0" stop-color="#f6ecd6" stop-opacity=".95"/>
+        <stop offset=".55" stop-color="#e8ddc6" stop-opacity=".55"/>
+        <stop offset="1" stop-color="#e8ddc6" stop-opacity="0"/>
+      </radialGradient>
+      <linearGradient id="lake" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0" stop-color="#0e2133"/>
+        <stop offset=".55" stop-color="#0a1725"/>
+        <stop offset="1" stop-color="#060d17"/>
+      </linearGradient>
+      <linearGradient id="ridge1" x1="0" y1="0" x2=".2" y2="1">
+        <stop offset="0" stop-color="#16273d"/>
+        <stop offset="1" stop-color="#0a1421"/>
+      </linearGradient>
+      <linearGradient id="ridge2" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0" stop-color="#0c1929"/>
+        <stop offset="1" stop-color="#07101b"/>
+      </linearGradient>
+      <radialGradient id="glow" cx=".5" cy=".5" r=".5">
+        <stop offset="0" stop-color="#8db4e8" stop-opacity=".22"/>
+        <stop offset="1" stop-color="#8db4e8" stop-opacity="0"/>
+      </radialGradient>
+      <filter id="soft" x="-30%" y="-30%" width="160%" height="160%">
+        <feGaussianBlur stdDeviation="18"/>
+      </filter>
+    </defs>
 
-    <label class="search">
-      <svg width="15" height="15" viewBox="0 0 24 24" fill="none"
-           stroke="currentColor" stroke-width="2" stroke-linecap="round">
-        <circle cx="11" cy="11" r="7"/><path d="m20 20-3.2-3.2"/>
-      </svg>
-      <input id="filter" type="search" placeholder="Search name, model, MAC or IP"
-             autocomplete="off" spellcheck="false">
-    </label>
+    <rect width="1920" height="1080" fill="url(#sky)"/>
 
-    <button class="api-btn" id="api-btn" type="button" title="API documentation">
-      <svg width="15" height="15" viewBox="0 0 24 24" fill="none"
-           stroke="currentColor" stroke-width="1.9" stroke-linecap="round">
-        <path d="m8 8-4 4 4 4M16 8l4 4-4 4M13.5 5l-3 14"/>
-      </svg>
-      API
-    </button>
-  </div>
+    <!-- moon glow -->
+    <circle cx="1508" cy="196" r="180" fill="url(#glow)"/>
+    <circle cx="1508" cy="196" r="46" fill="url(#moon)"/>
+    <circle cx="1524" cy="184" r="44" fill="#081020" opacity=".55"/>
 
-  <div class="chips" id="chips">
-    <span class="chip active" data-filter="all">
-      <span class="dot ok"></span><b id="n-ok">0</b> connected
-    </span>
-    <span class="chip" data-filter="warn">
-      <span class="dot warn"></span><b id="n-warn">0</b> no response
-    </span>
-    <span class="chip" data-filter="offline">
-      <span class="dot"></span><b id="n-off">0</b> offline
-    </span>
-  </div>
+    <!-- stars -->
+    <g class="stars" fill="#dfe9ff">
+      <circle cx="180" cy="120" r="1.5" opacity=".65"/>
+      <circle cx="310" cy="212" r="1.1" opacity=".45"/>
+      <circle cx="470" cy="96" r="1.7" opacity=".7"/>
+      <circle cx="640" cy="188" r="1.1" opacity=".4"/>
+      <circle cx="782" cy="74" r="1.4" opacity=".6"/>
+      <circle cx="920" cy="150" r="1.0" opacity=".35"/>
+      <circle cx="1060" cy="88" r="1.6" opacity=".6"/>
+      <circle cx="1188" cy="196" r="1.1" opacity=".4"/>
+      <circle cx="1310" cy="112" r="1.3" opacity=".55"/>
+      <circle cx="1660" cy="118" r="1.5" opacity=".6"/>
+      <circle cx="1770" cy="244" r="1.1" opacity=".4"/>
+      <circle cx="90" cy="268" r="1.2" opacity=".4"/>
+      <circle cx="560" cy="300" r="1.0" opacity=".3"/>
+      <circle cx="1010" cy="286" r="1.2" opacity=".35"/>
+    </g>
+    <g class="stars stars-2" fill="#eaf2ff">
+      <circle cx="240" cy="330" r="1.0" opacity=".28"/>
+      <circle cx="700" cy="250" r="1.6" opacity=".5"/>
+      <circle cx="880" cy="330" r="1.0" opacity=".25"/>
+      <circle cx="1240" cy="300" r="1.4" opacity=".4"/>
+      <circle cx="1420" cy="352" r="1.0" opacity=".3"/>
+      <circle cx="1600" cy="300" r="1.2" opacity=".35"/>
+      <circle cx="380" cy="380" r="1.1" opacity=".3"/>
+      <circle cx="1120" cy="400" r="1.0" opacity=".25"/>
+    </g>
 
-  <div class="chips cats" id="cats"></div>
-</header>
+    <!-- distant ridge -->
+    <path d="M0 620 L180 528 L320 588 L470 496 L620 566 L760 500 L900 574 L1040 512 L1180 560 L1320 480 L1460 552 L1600 506 L1740 566 L1920 500 L1920 1080 L0 1080 Z"
+          fill="url(#ridge1)" opacity=".85"/>
+    <!-- mist band -->
+    <rect x="0" y="596" width="1920" height="120" fill="#b7cbe4" opacity=".045" filter="url(#soft)"/>
+    <!-- near ridge -->
+    <path d="M0 730 L200 654 L380 704 L540 628 L700 690 L860 636 L1020 700 L1180 650 L1340 712 L1500 662 L1660 716 L1820 668 L1920 706 L1920 1080 L0 1080 Z"
+          fill="url(#ridge2)"/>
 
-<main id="grid"></main>
+    <!-- lake -->
+    <rect x="0" y="820" width="1920" height="260" fill="url(#lake)"/>
+    <g opacity=".22" fill="#cfe0f5">
+      <rect x="1330" y="874" width="360" height="2" rx="1"/>
+      <rect x="1390" y="902" width="250" height="2" rx="1"/>
+      <rect x="1440" y="934" width="170" height="2" rx="1"/>
+      <rect x="1470" y="968" width="110" height="2" rx="1"/>
+      <rect x="120" y="900" width="220" height="2" rx="1" opacity=".6"/>
+      <rect x="200" y="936" width="120" height="2" rx="1" opacity=".5"/>
+    </g>
+
+    <!-- pine forest -->
+    <g fill="#04080f">
+      <path d="M0 1080 L0 812 L40 812 L90 742 L140 812 L180 780 L230 838 L280 792 L330 846 L380 800 L430 852 L480 806 L530 858 L580 812 L630 862 L680 816 L730 866 L780 820 L830 870 L880 824 L930 872 L980 828 L1030 876 L1080 830 L1130 878 L1180 834 L1230 880 L1280 836 L1330 882 L1380 838 L1430 884 L1480 840 L1530 886 L1580 842 L1630 888 L1680 844 L1730 890 L1780 846 L1830 892 L1880 848 L1920 886 L1920 1080 Z" opacity=".92"/>
+      <path d="M0 1080 L0 892 L60 892 L130 800 L200 892 L260 848 L330 900 L400 856 L470 906 L540 860 L610 910 L680 864 L750 914 L820 868 L890 918 L960 872 L1030 922 L1100 876 L1170 926 L1240 880 L1310 930 L1380 884 L1450 934 L1520 888 L1590 938 L1660 892 L1730 942 L1800 896 L1870 944 L1920 902 L1920 1080 Z"/>
+    </g>
+    <g fill="#03060c">
+      <path d="M0 1080 L0 960 L80 960 L160 884 L240 960 L320 920 L400 972 L480 928 L560 980 L640 934 L720 984 L800 938 L880 988 L960 942 L1040 992 L1120 946 L1200 996 L1280 950 L1360 1000 L1440 954 L1520 1004 L1600 958 L1680 1008 L1760 962 L1840 1010 L1920 966 L1920 1080 Z"/>
+    </g>
+    <rect x="0" y="1046" width="1920" height="34" fill="#02050a"/>
+  </svg>
+</div>
+
+<div class="shell">
+  <header class="top">
+    <div class="brand">
+      <span class="mark">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none"
+             stroke="currentColor" stroke-width="1.7" stroke-linecap="round">
+          <path d="M9 18h6M10 21h4"/>
+          <path d="M12 3a6 6 0 0 0-3.3 10.9c.5.4.8 1 .8 1.6V16h5v-.5c0-.6.3-1.2.8-1.6A6 6 0 0 0 12 3Z"/>
+        </svg>
+      </span>
+      <div>
+        <h1>Wiz Lights</h1>
+        <p class="sub" id="subtitle">looking for bulbs…</p>
+      </div>
+    </div>
+
+    <div class="tools">
+      <label class="search">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none"
+             stroke="currentColor" stroke-width="2" stroke-linecap="round">
+          <circle cx="11" cy="11" r="7"/><path d="m20 20-3.2-3.2"/>
+        </svg>
+        <input id="filter" type="search" placeholder="Search name, MAC or IP"
+               autocomplete="off" spellcheck="false">
+      </label>
+      <button class="liquid" id="api-btn" type="button" title="API documentation">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none"
+             stroke="currentColor" stroke-width="1.9" stroke-linecap="round">
+          <path d="m8 8-4 4 4 4M16 8l4 4-4 4M13.5 5l-3 14"/>
+        </svg>
+        API
+      </button>
+    </div>
+  </header>
+
+  <nav class="toolbar">
+    <div class="tabs" id="cats"></div>
+    <div class="statuses" id="chips">
+      <button class="status active" type="button" data-filter="all">
+        <span class="dot"></span>All
+      </button>
+      <button class="status" type="button" data-filter="ok">
+        <span class="dot ok"></span><span id="n-ok">0</span> online
+      </button>
+      <button class="status" type="button" data-filter="warn">
+        <span class="dot warn"></span><span id="n-warn">0</span> no response
+      </button>
+      <button class="status" type="button" data-filter="offline">
+        <span class="dot"></span><span id="n-off">0</span> offline
+      </button>
+    </div>
+  </nav>
+
+  <main id="grid"></main>
+</div>
+
 <div id="toast" role="status"></div>
 
 <div class="modal" id="docs" hidden>
@@ -381,71 +667,36 @@
       <button class="close" id="docs-close" type="button" aria-label="Close">×</button>
     </div>
     <p>
-      Every bulb is addressed by its MAC. Use the MAC <b>without separators</b>
-      in URLs (<code>9877d50abae0</code>); the button under each card copies it.
+      Bulbs are addressed by MAC, without separators:
+      <code>9877d50abae0</code>. Click the MAC under a card to copy it.
     </p>
 
+    <h3>Lights</h3>
     <table>
-      <thead>
-        <tr><th>Method</th><th>Path</th><th>Purpose</th></tr>
-      </thead>
-      <tbody>
-        <tr><td>GET</td><td><code>/bulbs</code></td>
-          <td>Cached list of all bulbs. Add <code>?live=1</code> to probe them first.</td></tr>
-        <tr><td>GET</td><td><code>/bulb/&lt;mac&gt;</code></td>
-          <td>Strict live check: <code>200</code> when the bulb answers, <code>503</code> when not. Used by Shelly.</td></tr>
-        <tr><td>GET</td><td><code>/bulb/&lt;mac&gt;/state</code></td>
-          <td>Power state plus colour: <code>state</code>, <code>dimming</code>, <code>r/g/b/c/w</code>, <code>temp</code>, <code>sceneId</code>.</td></tr>
-        <tr><td>POST</td><td><code>/bulb/&lt;mac&gt;/toggle</code></td>
-          <td>Flip power. Returns the new <code>state</code>.</td></tr>
-        <tr><td>POST</td><td><code>/bulb/&lt;mac&gt;/on</code></td>
-          <td>Turn on.</td></tr>
-        <tr><td>POST</td><td><code>/bulb/&lt;mac&gt;/off</code></td>
-          <td>Turn off.</td></tr>
-        <tr><td>POST</td><td><code>/bulb/&lt;mac&gt;/set</code></td>
-          <td>Raw <code>setPilot</code> with a JSON body: <code>dimming</code>, <code>temp</code>, <code>r</code>/<code>g</code>/<code>b</code>, <code>sceneId</code>…</td></tr>
-        <tr><td>POST</td><td><code>/bulb/&lt;mac&gt;/category</code></td>
-          <td>Assign a category: <code>{"category": "&lt;id&gt;"}</code>, or <code>null</code> to clear.</td></tr>
-        <tr><td>DELETE</td><td><code>/bulb/&lt;mac&gt;</code></td>
-          <td>Forget a bulb. It is re-added automatically if it appears on the LAN again.</td></tr>
-        <tr><td>GET</td><td><code>/categories</code></td>
-          <td>Categories with bulb counts.</td></tr>
-        <tr><td>POST</td><td><code>/categories</code></td>
-          <td>Create one: <code>{"name": "Bedroom"}</code>.</td></tr>
-        <tr><td>DELETE</td><td><code>/categories/&lt;id&gt;</code></td>
-          <td>Delete a category; its bulbs become uncategorised.</td></tr>
-        <tr><td>GET</td><td><code>/healthz</code></td>
-          <td><code>{"ok": true}</code> when the service is running.</td></tr>
-      </tbody>
+      <tr><td>GET /bulbs</td><td>All known bulbs and categories. <code>?live=1</code> refreshes first.</td></tr>
+      <tr><td>GET /bulb/&lt;mac&gt;</td><td><code>200</code> if the bulb answers right now, <code>503</code> if not.</td></tr>
+      <tr><td>POST /bulb/&lt;mac&gt;/toggle</td><td>Flip power. Also <code>/on</code> and <code>/off</code>.</td></tr>
+      <tr><td>POST /bulb/&lt;mac&gt;/set</td><td><code>setPilot</code> fields: <code>dimming</code>, <code>temp</code>, <code>r/g/b</code>, <code>sceneId</code>…</td></tr>
+      <tr><td>DELETE /bulb/&lt;mac&gt;</td><td>Forget a bulb.</td></tr>
     </table>
 
-    <h3>Status fields</h3>
-    <p>
-      <code>present</code> — on the LAN (TCP check every 60 s).<br>
-      <code>responsive</code> — answered UDP within the last 60 s.<br>
-      Unreachable bulbs answer <code>503</code> with
-      <code>{"online": false}</code>.
-    </p>
+    <h3>Categories</h3>
+    <table>
+      <tr><td>GET /categories</td><td>Categories with bulb counts.</td></tr>
+      <tr><td>POST /categories</td><td><code>{"name": "Bedroom"}</code></td></tr>
+      <tr><td>DELETE /categories/&lt;id&gt;</td><td>Delete; bulbs become uncategorised.</td></tr>
+      <tr><td>POST /bulb/&lt;mac&gt;/category</td><td><code>{"category": "&lt;id&gt;"}</code> or <code>null</code>.</td></tr>
+    </table>
 
-    <h3>Examples</h3>
-    <pre>curl -s http://192.168.1.5:8077/bulbs?live=1
-
-curl -s http://192.168.1.5:8077/bulb/9877d50abae0
+    <pre>curl -s http://192.168.1.5:8077/bulbs
 curl -s -X POST http://192.168.1.5:8077/bulb/9877d50abae0/toggle
 curl -s -X POST http://192.168.1.5:8077/bulb/9877d50abae0/set \
-     -d '{"dimming": 40, "temp": 2700}'
+     -d '{"dimming": 40, "temp": 2700}'</pre>
 
-# Shelly: 200 = bulb is reachable right now
-curl -s -o /dev/null -w "%{http_code}" \
-     http://192.168.1.5:8077/bulb/9877d50abae0</pre>
     <p>
-      Known bulbs, their categories and manual removals are stored in
-      <code>/data/state.json</code>, so an offline bulb stays visible until you
-      remove it.
-    </p>
-    <p>
-      If <code>WIZ_API_TOKEN</code> is set, send
-      <code>Authorization: Bearer &lt;token&gt;</code> with every request.
+      Known bulbs and categories are stored in <code>/data/state.json</code>.
+      Add <code>Authorization: Bearer &lt;token&gt;</code> if
+      <code>WIZ_API_TOKEN</code> is set.
     </p>
   </div>
 </div>
@@ -468,12 +719,13 @@ const state = {
 const grid = document.getElementById("grid");
 const toast = document.getElementById("toast");
 const filterInput = document.getElementById("filter");
+const cats = document.getElementById("cats");
+const subtitle = document.getElementById("subtitle");
 const counts = {
   ok: document.getElementById("n-ok"),
   warn: document.getElementById("n-warn"),
   off: document.getElementById("n-off")
 };
-const cats = document.getElementById("cats");
 
 // ---- api -------------------------------------------------------------------
 
@@ -498,7 +750,7 @@ function toastError(message) {
   toast.classList.add("show");
   toast.classList.remove("ok");
   clearTimeout(toast._hide);
-  toast._hide = setTimeout(() => toast.classList.remove("show"), 4000);
+  toast._hide = setTimeout(() => toast.classList.remove("show"), 4200);
 }
 
 function toastNote(message) {
@@ -528,7 +780,15 @@ async function copyMac(bulb) {
   }
 }
 
-// ---- colour ----------------------------------------------------------------
+function postJson(path, body, method) {
+  return api(path, {
+    method: method || "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body)
+  });
+}
+
+// ---- helpers ---------------------------------------------------------------
 
 function kelvinToRgb(kelvin) {
   const t = Math.max(1000, Math.min(12000, kelvin)) / 100;
@@ -547,8 +807,8 @@ function kelvinToRgb(kelvin) {
 }
 
 function orbColor(bulb) {
-  if (!bulb.present) return "#1d222b";
-  if (!bulb.state) return "#232833";
+  if (!bulb.present) return "#161d2b";
+  if (!bulb.state) return "#1b2333";
   let rgb;
   if (bulb.r != null && bulb.g != null && bulb.b != null &&
       (bulb.r + bulb.g + bulb.b) > 0) {
@@ -563,11 +823,8 @@ function orbColor(bulb) {
     rgb = [255, 214, 160];
   }
   const dim = (bulb.dimming == null ? 100 : Math.max(15, bulb.dimming)) / 100;
-  const mix = v => Math.round(v * dim);
-  return `rgb(${rgb.map(mix).join(",")})`;
+  return `rgb(${rgb.map(v => Math.round(v * dim)).join(",")})`;
 }
-
-// ---- status ----------------------------------------------------------------
 
 function statusOf(bulb) {
   if (!bulb.present) return { key: "offline", label: "Offline", cls: "" };
@@ -576,14 +833,19 @@ function statusOf(bulb) {
 }
 
 function nameOf(bulb) {
-  return "WiZ " + bulb.mac.slice(-6);
+  return "Wiz " + bulb.mac.slice(-6);
 }
-
-// ---- render ----------------------------------------------------------------
 
 function formatMac(mac) {
   return (mac.match(/.{2}/g) || [mac]).join(":").toLowerCase();
 }
+
+function categoryName(id) {
+  const cat = state.categories.find(c => c.id === id);
+  return cat ? cat.name : "";
+}
+
+// ---- render ----------------------------------------------------------------
 
 function render() {
   const text = state.text.trim().toLowerCase().replace(/[^a-z0-9]/g, "");
@@ -605,9 +867,15 @@ function render() {
   }
 
   const total = state.bulbs;
-  counts.ok.textContent = total.filter(b => statusOf(b).key === "ok").length;
-  counts.warn.textContent = total.filter(b => statusOf(b).key === "warn").length;
-  counts.off.textContent = total.filter(b => statusOf(b).key === "offline").length;
+  const okN = total.filter(b => statusOf(b).key === "ok").length;
+  const warnN = total.filter(b => statusOf(b).key === "warn").length;
+  const offN = total.filter(b => statusOf(b).key === "offline").length;
+  counts.ok.textContent = okN;
+  counts.warn.textContent = warnN;
+  counts.off.textContent = offN;
+
+  subtitle.textContent = `${total.length} bulb${total.length === 1 ? "" : "s"}` +
+    ` · ${okN} online · ${state.categories.length} room${state.categories.length === 1 ? "" : "s"}`;
 
   renderCategories();
   grid.replaceChildren();
@@ -632,37 +900,41 @@ function renderCategories() {
     tally[key] = (tally[key] || 0) + 1;
   }
 
-  const chip = (key, label, count, extra) => {
-    const el = document.createElement("span");
-    el.className = "chip" + (state.categoryFilter === key ? " active" : "");
+  const tab = (key, label, count, deletable) => {
+    const el = document.createElement("button");
+    el.type = "button";
+    el.className = "tab" + (state.categoryFilter === key ? " active" : "");
+    if (deletable) el.classList.add("del");
     el.dataset.cat = key;
-    el.append(document.createTextNode(label + " "));
+    el.append(document.createTextNode(label));
     const num = document.createElement("span");
-    num.className = "count";
+    num.className = "num";
     num.textContent = count;
     el.append(num);
-    if (extra) el.append(extra);
+    if (deletable) {
+      const x = document.createElement("span");
+      x.className = "x";
+      x.textContent = "×";
+      x.dataset.del = key;
+      x.title = `Delete category "${label}"`;
+      el.append(x);
+    }
     return el;
   };
 
   cats.replaceChildren();
-  cats.append(chip("all", "All bulbs", state.bulbs.length));
-  cats.append(chip("none", "Uncategorised", tally.none || 0));
+  cats.append(tab("all", "All bulbs", state.bulbs.length));
+  cats.append(tab("none", "Uncategorised", tally.none || 0));
 
   for (const c of state.categories) {
-    const del = document.createElement("button");
-    del.type = "button";
-    del.className = "cat-del";
-    del.textContent = "×";
-    del.title = `Delete category "${c.name}"`;
-    del.dataset.del = c.id;
-    cats.append(chip(c.id, c.name, tally[c.id] || 0, del));
+    cats.append(tab(c.id, c.name, tally[c.id] || 0, true));
   }
 
-  const add = document.createElement("span");
-  add.className = "chip new";
+  const add = document.createElement("button");
+  add.type = "button";
+  add.className = "tab add";
   add.dataset.new = "1";
-  add.textContent = "+ Category";
+  add.textContent = "+ Room";
   cats.append(add);
 }
 
@@ -670,6 +942,11 @@ const POWER_SVG =
   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" ' +
   'stroke-width="1.9" stroke-linecap="round">' +
   '<path d="M12 3v9"/><path d="M6.6 6.6a8 8 0 1 0 10.8 0"/></svg>';
+
+const CHEVRON_SVG =
+  '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" ' +
+  'stroke="currentColor" stroke-width="2" stroke-linecap="round">' +
+  '<path d="M4 8h16M4 16h16"/></svg>';
 
 function card(bulb) {
   const status = statusOf(bulb);
@@ -689,19 +966,23 @@ function card(bulb) {
 
   const model = document.createElement("div");
   model.className = "model";
+  const room = categoryName(bulb.category);
   model.textContent = bulb.model || "WiZ bulb";
+  if (room) model.textContent += " · " + room;
 
   const addr = document.createElement("div");
   addr.className = "addr";
   addr.append(document.createTextNode(bulb.ip || "no address"));
-
+  const sep = document.createElement("span");
+  sep.className = "sep";
+  sep.textContent = "·";
   const macButton = document.createElement("button");
   macButton.type = "button";
   macButton.className = "mac";
   macButton.textContent = formatMac(bulb.mac);
   macButton.title = "Copy MAC " + bulb.mac;
   macButton.addEventListener("click", () => copyMac(bulb));
-  addr.append(macButton);
+  addr.append(sep, macButton);
 
   const line = document.createElement("div");
   line.className = "state " + status.cls;
@@ -726,7 +1007,7 @@ function card(bulb) {
   if (!bulb.present) {
     const rm = document.createElement("button");
     rm.type = "button";
-    rm.className = "remove-btn";
+    rm.className = "remove";
     rm.textContent = "Remove";
     rm.title = "Forget this bulb";
     rm.addEventListener("click", () => removeBulb(bulb));
@@ -734,11 +1015,12 @@ function card(bulb) {
   }
 
   const catRow = document.createElement("div");
-  catRow.className = "catrow";
+  catRow.className = "cat";
+  catRow.innerHTML = CHEVRON_SVG;
   const catSelect = document.createElement("select");
-  catSelect.className = "cat-select";
-  catSelect.title = "Category";
-  catSelect.append(new Option("No category", ""));
+  catSelect.title = "Room";
+  catSelect.setAttribute("aria-label", "Room for " + nameOf(bulb));
+  catSelect.append(new Option("No room", ""));
   for (const c of state.categories) catSelect.append(new Option(c.name, c.id));
   catSelect.value = bulb.category || "";
   catSelect.addEventListener("change",
@@ -748,10 +1030,12 @@ function card(bulb) {
   info.append(name, model, addr, line, catRow);
 
   const button = document.createElement("button");
+  button.type = "button";
   button.className = "power" + (bulb.state && bulb.present ? " on" : "");
   button.disabled = !bulb.present || state.pending.has(bulb.mac);
-  button.innerHTML = POWER_SVG + "<span>" + (bulb.state ? "On" : "Off") + "</span>";
   button.setAttribute("aria-label", bulb.state ? "Turn off" : "Turn on");
+  button.innerHTML = POWER_SVG +
+    '<span class="lbl">' + (bulb.state ? "On" : "Off") + "</span>";
   button.addEventListener("click", () => toggle(bulb));
 
   el.append(orb, info, button);
@@ -764,16 +1048,10 @@ async function load() {
   if (state.loading) return;
   state.loading = true;
   try {
-    const [res, catRes] = await Promise.all([
-      api("/bulbs?live=1"),
-      api("/categories")
-    ]);
+    const res = await api("/bulbs?live=1");
     if (!res.ok) throw new Error("HTTP " + res.status);
     const data = await res.json();
-    if (catRes.ok) {
-      const catData = await catRes.json();
-      state.categories = catData.categories || [];
-    }
+    state.categories = data.categories || [];
     const previous = new Map(state.bulbs.map(b => [b.mac, b]));
 
     state.bulbs = (data.bulbs || []).map(next => {
@@ -823,35 +1101,26 @@ async function toggle(bulb) {
 
 // ---- categories & removal --------------------------------------------------
 
-async function postJson(path, body, method) {
-  return api(path, {
-    method: method || "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body)
-  });
-}
-
 async function newCategory() {
-  const name = prompt("New category name:");
+  const name = prompt("New room name:");
   if (!name || !name.trim()) return;
   const res = await postJson("/categories", { name: name.trim() });
   const body = await res.json().catch(() => ({}));
   if (!res.ok) {
-    toastError("Could not add category: " + (body.error || "HTTP " + res.status));
+    toastError("Could not add room: " + (body.error || "HTTP " + res.status));
     return;
   }
   if (!state.categories.some(c => c.id === body.id)) state.categories.push(body);
-  state.categoryFilter = body.id;
   render();
 }
 
 async function deleteCategory(id) {
   const cat = state.categories.find(c => c.id === id);
   if (!cat) return;
-  if (!confirm(`Delete category "${cat.name}"?\n\nBulbs stay in the list, just uncategorised.`)) return;
+  if (!confirm(`Delete room "${cat.name}"?\n\nBulbs stay in the list, just uncategorised.`)) return;
   const res = await api(`/categories/${encodeURIComponent(id)}`, { method: "DELETE" });
   if (!res.ok) {
-    toastError("Could not delete category: HTTP " + res.status);
+    toastError("Could not delete room: HTTP " + res.status);
     return;
   }
   state.categories = state.categories.filter(c => c.id !== id);
@@ -864,7 +1133,7 @@ async function setCategory(bulb, cid) {
   const res = await postJson(`/bulb/${bulb.mac}/category`, { category: cid || null });
   const body = await res.json().catch(() => ({}));
   if (!res.ok) {
-    toastError("Could not set category: " + (body.error || "HTTP " + res.status));
+    toastError("Could not change room: " + (body.error || "HTTP " + res.status));
     return;
   }
   bulb.category = body.category || null;
@@ -893,27 +1162,28 @@ filterInput.addEventListener("input", () => {
 });
 
 cats.addEventListener("click", ev => {
-  const del = ev.target.closest(".cat-del");
+  const del = ev.target.closest(".x");
   if (del) {
+    ev.stopPropagation();
     deleteCategory(del.dataset.del);
     return;
   }
-  const chip = ev.target.closest(".chip");
-  if (!chip) return;
-  if (chip.dataset.new) {
+  const tab = ev.target.closest(".tab");
+  if (!tab) return;
+  if (tab.dataset.new) {
     newCategory();
     return;
   }
-  state.categoryFilter = chip.dataset.cat || "all";
+  state.categoryFilter = tab.dataset.cat || "all";
   render();
 });
 
 document.getElementById("chips").addEventListener("click", ev => {
-  const chip = ev.target.closest(".chip");
-  if (!chip) return;
-  state.statusFilter = chip.dataset.filter;
-  for (const c of document.querySelectorAll(".chip")) {
-    c.classList.toggle("active", c === chip);
+  const btn = ev.target.closest(".status");
+  if (!btn) return;
+  state.statusFilter = btn.dataset.filter;
+  for (const b of document.querySelectorAll(".status")) {
+    b.classList.toggle("active", b === btn);
   }
   render();
 });

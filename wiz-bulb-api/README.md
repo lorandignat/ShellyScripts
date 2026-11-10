@@ -31,7 +31,8 @@ stays in the list instead of disappearing. If it reappears later at a new DHCP
 address, its MAC entry is updated in place; the card never changes position.
 Remove a bulb manually once you are sure it no longer exists.
 
-Categories can be created with **+ Category** and assigned per card.
+Rooms (categories in the API) can be created with **+ Room** and assigned per
+card; the room tabs above the grid filter the list.
 
 Use the button to identify a bulb physically — the lamp changes immediately.
 There is no dimming or colour control by design. The page refreshes every 15 s;
@@ -47,7 +48,7 @@ If `WIZ_API_TOKEN` is set, the page asks for the token once and stores it in
 |---|---|---|
 | `GET` | `/` | web UI |
 | `GET` | `/healthz` | liveness |
-| `GET` | `/bulbs` | cached list |
+| `GET` | `/bulbs` | cached bulbs **and** categories |
 | `GET` | `/bulbs?live=1` | live `getPilot` for every known bulb (parallel) |
 | `GET` | `/bulb/<mac>` | live check: `200` bulb answered, `503` did not |
 | `GET` | `/bulb/<mac>/state` | same, plus state and colour |
@@ -103,17 +104,23 @@ surprising option on a home server: the scanner sees the LAN directly and the UI
 is reachable at `http://<host-ip>:8077`. Bridge networking also works (unicast
 scanning is used); see the comment at the bottom of the file.
 
-It also mounts a named volume at `/data` for the state file. Without that
-volume the container still works, but remembered bulbs and categories are lost
-when it is recreated. Add this to your compose stack if you manage it yourself:
+It bind-mounts `/homedir/data/wiz-bulb-api` at `/data` for the state file.
+Create it on the host first and make it writable by uid 10001 (the `rebuild`
+script does this for you):
+
+```bash
+sudo install -d -o 10001 -g 10001 /homedir/data/wiz-bulb-api
+```
+
+If you manage the compose stack yourself, add:
 
 ```yaml
     volumes:
-      - wiz-state:/data
-# ...
-volumes:
-  wiz-state:
+      - /homedir/data/wiz-bulb-api:/data
 ```
+
+Without that mount the container still works, but remembered bulbs and room
+assignments are lost when it is recreated.
 
 ### Configuration
 
