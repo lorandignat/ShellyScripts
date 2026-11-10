@@ -589,7 +589,7 @@ class Registry:
 def make_handler(registry: Registry, token: str, ui: bytes):
     class Handler(BaseHTTPRequestHandler):
         protocol_version = "HTTP/1.1"
-        server_version = "wiz-bulb-api/1.9"
+        server_version = "wiz-bulb-api/1.10"
 
         # -- helpers --------------------------------------------------------
 
