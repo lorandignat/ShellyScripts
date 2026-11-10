@@ -24,8 +24,8 @@ a card with:
 - the **colour currently set** (RGB, colour temperature or white channel) as a
   swatch
 - a single Turn on / Turn off button
-- a colour button next to it: warm/neutral/cool white, ten presets and a
-  custom picker
+- a colour button stacked above it: warm/neutral/cool white, ten presets and
+  a custom picker
 - a room selector, and a **Remove** button when the bulb is offline
 
 Known bulbs are remembered in a state file, so a bulb that is off — or gone —
