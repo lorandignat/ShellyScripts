@@ -20,14 +20,23 @@ Open `http://<host>:8077/` in a browser. Every bulb found on the LAN is shown as
 a card with:
 
 - MAC, IP and model
-- online / off-network
+- online / no response / offline
 - the **colour currently set** (RGB, colour temperature or white channel) as a
   swatch
 - a single Turn on / Turn off button
+- a category selector, and a **Remove** button when the bulb is offline
+
+Known bulbs are remembered in a state file, so a bulb that is off — or gone —
+stays in the list instead of disappearing. If it reappears later at a new DHCP
+address, its MAC entry is updated in place; the card never changes position.
+Remove a bulb manually once you are sure it no longer exists.
+
+Categories can be created with **+ Category** and assigned per card.
 
 Use the button to identify a bulb physically — the lamp changes immediately.
-There is no dimming or colour control by design. The page polls live state every
-5 s and greys out bulbs that do not answer.
+There is no dimming or colour control by design. The page refreshes every 15 s;
+the service probes each bulb at most once every 20 s and sweeps the LAN every
+60 s, so it stays quiet on the network.
 
 If `WIZ_API_TOKEN` is set, the page asks for the token once and stores it in
 `localStorage`.
@@ -46,6 +55,11 @@ If `WIZ_API_TOKEN` is set, the page asks for the token once and stores it in
 | `POST` | `/bulb/<mac>/on` | `setPilot {"state": true}` |
 | `POST` | `/bulb/<mac>/off` | `setPilot {"state": false}` |
 | `POST` | `/bulb/<mac>/set` | body forwarded to `setPilot` (whitelisted) |
+| `POST` | `/bulb/<mac>/category` | `{"category": "<id>"}` or `null` |
+| `DELETE` | `/bulb/<mac>` | forget a bulb (re-added if it appears again) |
+| `GET` | `/categories` | categories with bulb counts |
+| `POST` | `/categories` | create one: `{"name": "Bedroom"}` |
+| `DELETE` | `/categories/<id>` | delete; bulbs become uncategorised |
 
 MACs are accepted in any form: `9877d50abae0`, `98:77:d5:0a:ba:e0`,
 `98-77-D5-0A-BA-E0`.
@@ -89,6 +103,18 @@ surprising option on a home server: the scanner sees the LAN directly and the UI
 is reachable at `http://<host-ip>:8077`. Bridge networking also works (unicast
 scanning is used); see the comment at the bottom of the file.
 
+It also mounts a named volume at `/data` for the state file. Without that
+volume the container still works, but remembered bulbs and categories are lost
+when it is recreated. Add this to your compose stack if you manage it yourself:
+
+```yaml
+    volumes:
+      - wiz-state:/data
+# ...
+volumes:
+  wiz-state:
+```
+
 ### Configuration
 
 | Variable | Default | Meaning |
@@ -96,24 +122,30 @@ scanning is used); see the comment at the bottom of the file.
 | `WIZ_SUBNET` | `192.168.1.0/24` | where to look for bulbs |
 | `WIZ_HOSTS` | – | extra addresses, comma separated |
 | `WIZ_PORT` | `8077` | HTTP port |
-| `WIZ_SCAN_INTERVAL` | `60` | seconds between background scans |
-| `WIZ_SCAN_TIMEOUT` | `0.3` | UDP timeout during a scan |
-| `WIZ_OP_TIMEOUT` | `1.5` | UDP timeout for a live request |
-| `WIZ_WORKERS` | `64` | parallel hosts during a scan |
-| `WIZ_CACHE_TTL` | `180` | how long a cached IP is trusted |
-| `WIZ_PROBE_TIMEOUT` | `0.6` | UDP timeout for live UI probes |
-| `WIZ_RESPONSE_GRACE` | `30` | seconds without a reply before "no response" |
-| `WIZ_PRESENCE_INTERVAL` | `5` | seconds between LAN presence sweeps |
-| `WIZ_PRESENCE_TIMEOUT` | `0.4` | TCP timeout for a presence check |
+| `WIZ_SCAN_INTERVAL` | `120` | seconds between background scans |
+| `WIZ_SCAN_TIMEOUT` | `1.5` | UDP timeout during a scan |
+| `WIZ_OP_TIMEOUT` | `2.5` | UDP timeout for a live request |
+| `WIZ_WORKERS` | `64` | requested scan concurrency (capped at 32 threads) |
+| `WIZ_CACHE_TTL` | `300` | how long a cached IP is trusted |
+| `WIZ_PROBE_TIMEOUT` | `2.0` | UDP timeout for a status probe |
+| `WIZ_STATUS_INTERVAL` | `30` | seconds between background status checks |
+| `WIZ_PROBE_MIN_GAP` | `20` | minimum seconds between probes of one bulb |
+| `WIZ_RESPONSE_GRACE` | `60` | seconds without a reply before "no response" |
+| `WIZ_PRESENCE_INTERVAL` | `60` | seconds between LAN presence sweeps |
+| `WIZ_PRESENCE_TIMEOUT` | `1.5` | TCP timeout for a presence check |
+| `WIZ_STATE_FILE` | `/data/state.json` | remembered bulbs, categories, removals |
 | `WIZ_API_TOKEN` | – | if set, require `Authorization: Bearer <token>` |
 | `WIZ_LOG_LEVEL` | `INFO` | log verbosity |
 
 ## How discovery works
 
 1. A background thread scans the subnet (`getDevInfo`) and records `MAC -> IP`.
-2. A request resolves the MAC from that cache and talks to that IP.
-3. If the cached IP stops answering, the service rescans once and retries.
-4. If the bulb is still silent, the request returns `503`.
+2. Known bulbs are kept in the state file and loaded at startup, so they remain
+   listed while offline.
+3. A request resolves the MAC from that cache and talks to that IP.
+4. If the cached IP stops answering, the service rescans once and retries, and
+   a changed address is written back to the state file.
+5. If the bulb is still silent, the request returns `503`.
 
 Bulbs are matched by MAC, so DHCP changing their address is handled
 automatically. No reservations needed. Forced rescans are rate-limited, so a
@@ -123,13 +155,14 @@ burst of missing bulbs cannot turn into a scan storm.
 
 Two independent signals are tracked:
 
-- **LAN presence** — every 5 s the service opens a TCP connection to port 38899
-  on each known IP. A WiZ bulb refuses it, which proves the device is on the
-  network even when it is too busy to answer UDP. Not found = **offline
-  immediately**.
-- **Response** — `getPilot` over UDP. If a bulb is on the LAN but has not
-  answered for `WIZ_RESPONSE_GRACE` seconds (default 30), the UI shows
-  **no response** instead of flapping to offline.
+- **LAN presence** — every 60 s the service opens a TCP connection to port
+  38899 on each known IP, just to confirm the address is still there. A WiZ
+  bulb refuses it, which proves the device is on the network even when it is
+  too busy to answer UDP. A failed check is retried once before the bulb is
+  marked offline, because some bulbs take 300–400 ms to answer a TCP connect.
+- **Response** — `getPilot` over UDP, once per bulb every 30 s. If a bulb is on
+  the LAN but has not answered for `WIZ_RESPONSE_GRACE` seconds (default 60),
+  the UI shows **no response** instead of flapping to offline.
 
 So a lost UDP packet only changes "Connected" to "No response"; only the TCP
 presence check can make a bulb disappear.

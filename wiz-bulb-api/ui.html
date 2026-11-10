@@ -92,6 +92,41 @@
   .dot.ok { background: var(--green); }
   .dot.warn { background: var(--amber); }
 
+  .cats { margin-top: 8px; }
+  .chip .count { color: var(--muted-2); font-weight: 550; }
+  .cat-del {
+    display: inline-grid; place-items: center;
+    width: 17px; height: 17px; margin-left: 1px;
+    background: none; border: 0; border-radius: 50%;
+    color: var(--muted-2); font: inherit; font-size: 14px; line-height: 1;
+    cursor: pointer;
+  }
+  .cat-del:hover { background: #33202a; color: #ff9aa6; }
+  .chip.new {
+    border-style: dashed; color: var(--muted-2);
+  }
+  .chip.new:hover { color: var(--text); }
+
+  .catrow { margin-top: 8px; display: flex; align-items: center; gap: 6px; }
+  .cat-select {
+    max-width: 100%;
+    padding: 4px 8px;
+    background: var(--bg-2); color: var(--muted);
+    border: 1px solid var(--line); border-radius: 7px;
+    font: inherit; font-size: 12px;
+    cursor: pointer;
+  }
+  .cat-select:hover { color: var(--text); border-color: #36404f; }
+  .cat-select:focus { outline: none; border-color: #3a4658; }
+
+  .remove-btn {
+    margin-left: 4px; padding: 1px 7px;
+    background: none; border: 1px solid #3a2630; border-radius: 6px;
+    color: #d98a97; font: inherit; font-size: 11.5px;
+    cursor: pointer;
+  }
+  .remove-btn:hover { border-color: #6b3444; color: #ffb3be; }
+
   /* ---- grid ---- */
   main {
     max-width: 1480px; margin: 0 auto;
@@ -135,9 +170,92 @@
     overflow-wrap: anywhere;
   }
   .addr {
-    margin-top: 1px;
+    margin-top: 2px;
+    display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
     color: var(--muted-2); font-size: 12px;
     font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  }
+  .mac {
+    padding: 1px 6px; margin: 0;
+    background: var(--bg-2); color: var(--muted);
+    border: 1px solid var(--line); border-radius: 6px;
+    font: inherit; font-size: 11.5px; letter-spacing: .1px;
+    cursor: pointer;
+    transition: border-color .15s, color .15s;
+  }
+  .mac:hover { border-color: #3a4453; color: var(--text); }
+
+  /* ---- api docs ---- */
+  .api-btn {
+    display: inline-flex; align-items: center; gap: 7px;
+    padding: 9px 13px;
+    background: var(--bg-2); color: var(--muted);
+    border: 1px solid var(--line); border-radius: 10px;
+    font: inherit; font-size: 13px; font-weight: 600;
+    cursor: pointer;
+    transition: border-color .15s, color .15s;
+  }
+  .api-btn:hover { border-color: #3a4453; color: var(--text); }
+
+  .modal {
+    position: fixed; inset: 0; z-index: 20;
+    display: grid; place-items: center; padding: 20px;
+    background: rgba(5, 7, 10, .72);
+    backdrop-filter: blur(3px);
+  }
+  .modal[hidden] { display: none; }
+  .sheet {
+    width: min(760px, 100%); max-height: 86vh; overflow: auto;
+    background: var(--card); border: 1px solid var(--line);
+    border-radius: 18px; padding: 22px 24px 26px;
+    box-shadow: 0 30px 80px rgba(0, 0, 0, .55);
+  }
+  .sheet-head {
+    display: flex; align-items: center; gap: 12px; margin-bottom: 4px;
+  }
+  .sheet-head h2 { margin: 0; font-size: 18px; font-weight: 650; }
+  .sheet-head .close {
+    margin-left: auto; width: 34px; height: 34px;
+    display: grid; place-items: center;
+    background: var(--bg-2); color: var(--muted);
+    border: 1px solid var(--line); border-radius: 10px;
+    font: inherit; font-size: 17px; cursor: pointer;
+  }
+  .sheet-head .close:hover { color: var(--text); }
+  .sheet p { color: var(--muted); font-size: 13px; margin: 8px 0; }
+  .sheet table {
+    width: 100%; border-collapse: collapse; margin: 14px 0 6px;
+    font-size: 13px;
+  }
+  .sheet th {
+    text-align: left; color: var(--muted-2); font-size: 11.5px;
+    text-transform: uppercase; letter-spacing: .7px;
+    padding: 6px 10px; border-bottom: 1px solid var(--line);
+  }
+  .sheet td {
+    padding: 8px 10px; border-bottom: 1px solid var(--line-soft);
+    vertical-align: top;
+  }
+  .sheet td:first-child {
+    white-space: nowrap; color: var(--accent);
+    font-weight: 650; font-size: 12px;
+  }
+  .sheet code, .sheet pre {
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  }
+  .sheet code {
+    background: var(--bg-2); border: 1px solid var(--line);
+    padding: 1px 6px; border-radius: 6px; font-size: 12px;
+    overflow-wrap: anywhere;
+  }
+  .sheet pre {
+    background: var(--bg-2); border: 1px solid var(--line);
+    border-radius: 10px; padding: 12px 14px; overflow: auto;
+    font-size: 12px; line-height: 1.6; color: #cdd6e3;
+  }
+  .sheet h3 {
+    margin: 20px 0 6px; font-size: 13px; font-weight: 650;
+    color: var(--muted-2); text-transform: uppercase; letter-spacing: .7px;
   }
   .state {
     margin-top: 7px;
@@ -192,6 +310,9 @@
     z-index: 10;
   }
   #toast.show { opacity: 1; transform: translate(-50%, 0); }
+  #toast.ok {
+    background: #12241c; border-color: #25543e; color: #b8f5d4;
+  }
 
   @media (max-width: 560px) {
     header { padding: 16px 16px 12px; }
@@ -222,9 +343,17 @@
            stroke="currentColor" stroke-width="2" stroke-linecap="round">
         <circle cx="11" cy="11" r="7"/><path d="m20 20-3.2-3.2"/>
       </svg>
-      <input id="filter" type="search" placeholder="Search name, model or IP"
+      <input id="filter" type="search" placeholder="Search name, model, MAC or IP"
              autocomplete="off" spellcheck="false">
     </label>
+
+    <button class="api-btn" id="api-btn" type="button" title="API documentation">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none"
+           stroke="currentColor" stroke-width="1.9" stroke-linecap="round">
+        <path d="m8 8-4 4 4 4M16 8l4 4-4 4M13.5 5l-3 14"/>
+      </svg>
+      API
+    </button>
   </div>
 
   <div class="chips" id="chips">
@@ -238,18 +367,98 @@
       <span class="dot"></span><b id="n-off">0</b> offline
     </span>
   </div>
+
+  <div class="chips cats" id="cats"></div>
 </header>
 
 <main id="grid"></main>
 <div id="toast" role="status"></div>
+
+<div class="modal" id="docs" hidden>
+  <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="docs-title">
+    <div class="sheet-head">
+      <h2 id="docs-title">API</h2>
+      <button class="close" id="docs-close" type="button" aria-label="Close">×</button>
+    </div>
+    <p>
+      Every bulb is addressed by its MAC. Use the MAC <b>without separators</b>
+      in URLs (<code>9877d50abae0</code>); the button under each card copies it.
+    </p>
+
+    <table>
+      <thead>
+        <tr><th>Method</th><th>Path</th><th>Purpose</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>GET</td><td><code>/bulbs</code></td>
+          <td>Cached list of all bulbs. Add <code>?live=1</code> to probe them first.</td></tr>
+        <tr><td>GET</td><td><code>/bulb/&lt;mac&gt;</code></td>
+          <td>Strict live check: <code>200</code> when the bulb answers, <code>503</code> when not. Used by Shelly.</td></tr>
+        <tr><td>GET</td><td><code>/bulb/&lt;mac&gt;/state</code></td>
+          <td>Power state plus colour: <code>state</code>, <code>dimming</code>, <code>r/g/b/c/w</code>, <code>temp</code>, <code>sceneId</code>.</td></tr>
+        <tr><td>POST</td><td><code>/bulb/&lt;mac&gt;/toggle</code></td>
+          <td>Flip power. Returns the new <code>state</code>.</td></tr>
+        <tr><td>POST</td><td><code>/bulb/&lt;mac&gt;/on</code></td>
+          <td>Turn on.</td></tr>
+        <tr><td>POST</td><td><code>/bulb/&lt;mac&gt;/off</code></td>
+          <td>Turn off.</td></tr>
+        <tr><td>POST</td><td><code>/bulb/&lt;mac&gt;/set</code></td>
+          <td>Raw <code>setPilot</code> with a JSON body: <code>dimming</code>, <code>temp</code>, <code>r</code>/<code>g</code>/<code>b</code>, <code>sceneId</code>…</td></tr>
+        <tr><td>POST</td><td><code>/bulb/&lt;mac&gt;/category</code></td>
+          <td>Assign a category: <code>{"category": "&lt;id&gt;"}</code>, or <code>null</code> to clear.</td></tr>
+        <tr><td>DELETE</td><td><code>/bulb/&lt;mac&gt;</code></td>
+          <td>Forget a bulb. It is re-added automatically if it appears on the LAN again.</td></tr>
+        <tr><td>GET</td><td><code>/categories</code></td>
+          <td>Categories with bulb counts.</td></tr>
+        <tr><td>POST</td><td><code>/categories</code></td>
+          <td>Create one: <code>{"name": "Bedroom"}</code>.</td></tr>
+        <tr><td>DELETE</td><td><code>/categories/&lt;id&gt;</code></td>
+          <td>Delete a category; its bulbs become uncategorised.</td></tr>
+        <tr><td>GET</td><td><code>/healthz</code></td>
+          <td><code>{"ok": true}</code> when the service is running.</td></tr>
+      </tbody>
+    </table>
+
+    <h3>Status fields</h3>
+    <p>
+      <code>present</code> — on the LAN (TCP check every 60 s).<br>
+      <code>responsive</code> — answered UDP within the last 60 s.<br>
+      Unreachable bulbs answer <code>503</code> with
+      <code>{"online": false}</code>.
+    </p>
+
+    <h3>Examples</h3>
+    <pre>curl -s http://192.168.1.5:8077/bulbs?live=1
+
+curl -s http://192.168.1.5:8077/bulb/9877d50abae0
+curl -s -X POST http://192.168.1.5:8077/bulb/9877d50abae0/toggle
+curl -s -X POST http://192.168.1.5:8077/bulb/9877d50abae0/set \
+     -d '{"dimming": 40, "temp": 2700}'
+
+# Shelly: 200 = bulb is reachable right now
+curl -s -o /dev/null -w "%{http_code}" \
+     http://192.168.1.5:8077/bulb/9877d50abae0</pre>
+    <p>
+      Known bulbs, their categories and manual removals are stored in
+      <code>/data/state.json</code>, so an offline bulb stays visible until you
+      remove it.
+    </p>
+    <p>
+      If <code>WIZ_API_TOKEN</code> is set, send
+      <code>Authorization: Bearer &lt;token&gt;</code> with every request.
+    </p>
+  </div>
+</div>
 
 <script>
 "use strict";
 
 const state = {
   bulbs: [],
+  categories: [],
   text: "",
   statusFilter: "all",
+  categoryFilter: "all",
   pending: new Set(),
   token: localStorage.getItem("wiz-token") || "",
   timer: null,
@@ -264,6 +473,7 @@ const counts = {
   warn: document.getElementById("n-warn"),
   off: document.getElementById("n-off")
 };
+const cats = document.getElementById("cats");
 
 // ---- api -------------------------------------------------------------------
 
@@ -286,8 +496,36 @@ async function api(path, options, retried) {
 function toastError(message) {
   toast.textContent = message;
   toast.classList.add("show");
+  toast.classList.remove("ok");
   clearTimeout(toast._hide);
   toast._hide = setTimeout(() => toast.classList.remove("show"), 4000);
+}
+
+function toastNote(message) {
+  toast.textContent = message;
+  toast.classList.add("show", "ok");
+  clearTimeout(toast._hide);
+  toast._hide = setTimeout(() => toast.classList.remove("show"), 2200);
+}
+
+async function copyMac(bulb) {
+  try {
+    if (navigator.clipboard && window.isSecureContext) {
+      await navigator.clipboard.writeText(bulb.mac);
+    } else {
+      const tmp = document.createElement("textarea");
+      tmp.value = bulb.mac;
+      tmp.style.position = "fixed";
+      tmp.style.opacity = "0";
+      document.body.append(tmp);
+      tmp.select();
+      document.execCommand("copy");
+      tmp.remove();
+    }
+    toastNote("Copied MAC " + bulb.mac);
+  } catch {
+    toastError("MAC address: " + bulb.mac);
+  }
 }
 
 // ---- colour ----------------------------------------------------------------
@@ -343,25 +581,35 @@ function nameOf(bulb) {
 
 // ---- render ----------------------------------------------------------------
 
+function formatMac(mac) {
+  return (mac.match(/.{2}/g) || [mac]).join(":").toLowerCase();
+}
+
 function render() {
-  const text = state.text.trim().toLowerCase();
-  let bulbs = state.bulbs.filter(b =>
-    !text || `${nameOf(b)} ${b.mac} ${b.ip} ${b.model || ""}`.toLowerCase().includes(text));
+  const text = state.text.trim().toLowerCase().replace(/[^a-z0-9]/g, "");
+  let bulbs = state.bulbs.filter(b => {
+    if (!text) return true;
+    const hay = `${nameOf(b)} ${b.mac} ${formatMac(b.mac)} ${b.ip} ${b.model || ""}`
+      .toLowerCase().replace(/[^a-z0-9]/g, "");
+    return hay.includes(text);
+  });
 
   if (state.statusFilter !== "all") {
     bulbs = bulbs.filter(b => statusOf(b).key === state.statusFilter);
   }
 
-  const rank = b => statusOf(b).key === "ok" ? 0 : statusOf(b).key === "warn" ? 1 : 2;
-  bulbs = bulbs.slice().sort((a, b) =>
-    rank(a) - rank(b) ||
-    a.ip.localeCompare(b.ip, undefined, { numeric: true }));
+  if (state.categoryFilter === "none") {
+    bulbs = bulbs.filter(b => !b.category);
+  } else if (state.categoryFilter !== "all") {
+    bulbs = bulbs.filter(b => b.category === state.categoryFilter);
+  }
 
   const total = state.bulbs;
   counts.ok.textContent = total.filter(b => statusOf(b).key === "ok").length;
   counts.warn.textContent = total.filter(b => statusOf(b).key === "warn").length;
   counts.off.textContent = total.filter(b => statusOf(b).key === "offline").length;
 
+  renderCategories();
   grid.replaceChildren();
 
   if (!bulbs.length) {
@@ -369,12 +617,53 @@ function render() {
     empty.className = "empty";
     empty.innerHTML = total.length
       ? "Nothing matches this view."
-      : "No bulbs found yet.<br>Check <code>WIZ_SUBNET</code> and that the service can reach UDP 38899.";
+      : "No bulbs known yet.<br>Check <code>WIZ_SUBNET</code> and that the service can reach UDP 38899.";
     grid.append(empty);
     return;
   }
 
   for (const bulb of bulbs) grid.append(card(bulb));
+}
+
+function renderCategories() {
+  const tally = {};
+  for (const b of state.bulbs) {
+    const key = b.category || "none";
+    tally[key] = (tally[key] || 0) + 1;
+  }
+
+  const chip = (key, label, count, extra) => {
+    const el = document.createElement("span");
+    el.className = "chip" + (state.categoryFilter === key ? " active" : "");
+    el.dataset.cat = key;
+    el.append(document.createTextNode(label + " "));
+    const num = document.createElement("span");
+    num.className = "count";
+    num.textContent = count;
+    el.append(num);
+    if (extra) el.append(extra);
+    return el;
+  };
+
+  cats.replaceChildren();
+  cats.append(chip("all", "All bulbs", state.bulbs.length));
+  cats.append(chip("none", "Uncategorised", tally.none || 0));
+
+  for (const c of state.categories) {
+    const del = document.createElement("button");
+    del.type = "button";
+    del.className = "cat-del";
+    del.textContent = "×";
+    del.title = `Delete category "${c.name}"`;
+    del.dataset.del = c.id;
+    cats.append(chip(c.id, c.name, tally[c.id] || 0, del));
+  }
+
+  const add = document.createElement("span");
+  add.className = "chip new";
+  add.dataset.new = "1";
+  add.textContent = "+ Category";
+  cats.append(add);
 }
 
 const POWER_SVG =
@@ -404,7 +693,15 @@ function card(bulb) {
 
   const addr = document.createElement("div");
   addr.className = "addr";
-  addr.textContent = bulb.ip || "no address";
+  addr.append(document.createTextNode(bulb.ip || "no address"));
+
+  const macButton = document.createElement("button");
+  macButton.type = "button";
+  macButton.className = "mac";
+  macButton.textContent = formatMac(bulb.mac);
+  macButton.title = "Copy MAC " + bulb.mac;
+  macButton.addEventListener("click", () => copyMac(bulb));
+  addr.append(macButton);
 
   const line = document.createElement("div");
   line.className = "state " + status.cls;
@@ -426,7 +723,29 @@ function card(bulb) {
     line.append(document.createTextNode(" "), detail);
   }
 
-  info.append(name, model, addr, line);
+  if (!bulb.present) {
+    const rm = document.createElement("button");
+    rm.type = "button";
+    rm.className = "remove-btn";
+    rm.textContent = "Remove";
+    rm.title = "Forget this bulb";
+    rm.addEventListener("click", () => removeBulb(bulb));
+    line.append(rm);
+  }
+
+  const catRow = document.createElement("div");
+  catRow.className = "catrow";
+  const catSelect = document.createElement("select");
+  catSelect.className = "cat-select";
+  catSelect.title = "Category";
+  catSelect.append(new Option("No category", ""));
+  for (const c of state.categories) catSelect.append(new Option(c.name, c.id));
+  catSelect.value = bulb.category || "";
+  catSelect.addEventListener("change",
+    () => setCategory(bulb, catSelect.value || null));
+  catRow.append(catSelect);
+
+  info.append(name, model, addr, line, catRow);
 
   const button = document.createElement("button");
   button.className = "power" + (bulb.state && bulb.present ? " on" : "");
@@ -445,9 +764,16 @@ async function load() {
   if (state.loading) return;
   state.loading = true;
   try {
-    const res = await api("/bulbs?live=1");
+    const [res, catRes] = await Promise.all([
+      api("/bulbs?live=1"),
+      api("/categories")
+    ]);
     if (!res.ok) throw new Error("HTTP " + res.status);
     const data = await res.json();
+    if (catRes.ok) {
+      const catData = await catRes.json();
+      state.categories = catData.categories || [];
+    }
     const previous = new Map(state.bulbs.map(b => [b.mac, b]));
 
     state.bulbs = (data.bulbs || []).map(next => {
@@ -468,7 +794,7 @@ async function load() {
 function schedule() {
   clearTimeout(state.timer);
   if (document.hidden) return;
-  state.timer = setTimeout(load, 5000);
+  state.timer = setTimeout(load, 15000);
 }
 
 async function toggle(bulb) {
@@ -495,10 +821,90 @@ async function toggle(bulb) {
   }
 }
 
+// ---- categories & removal --------------------------------------------------
+
+async function postJson(path, body, method) {
+  return api(path, {
+    method: method || "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body)
+  });
+}
+
+async function newCategory() {
+  const name = prompt("New category name:");
+  if (!name || !name.trim()) return;
+  const res = await postJson("/categories", { name: name.trim() });
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    toastError("Could not add category: " + (body.error || "HTTP " + res.status));
+    return;
+  }
+  if (!state.categories.some(c => c.id === body.id)) state.categories.push(body);
+  state.categoryFilter = body.id;
+  render();
+}
+
+async function deleteCategory(id) {
+  const cat = state.categories.find(c => c.id === id);
+  if (!cat) return;
+  if (!confirm(`Delete category "${cat.name}"?\n\nBulbs stay in the list, just uncategorised.`)) return;
+  const res = await api(`/categories/${encodeURIComponent(id)}`, { method: "DELETE" });
+  if (!res.ok) {
+    toastError("Could not delete category: HTTP " + res.status);
+    return;
+  }
+  state.categories = state.categories.filter(c => c.id !== id);
+  for (const b of state.bulbs) if (b.category === id) b.category = null;
+  if (state.categoryFilter === id) state.categoryFilter = "all";
+  render();
+}
+
+async function setCategory(bulb, cid) {
+  const res = await postJson(`/bulb/${bulb.mac}/category`, { category: cid || null });
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    toastError("Could not set category: " + (body.error || "HTTP " + res.status));
+    return;
+  }
+  bulb.category = body.category || null;
+  render();
+}
+
+async function removeBulb(bulb) {
+  const label = `${nameOf(bulb)} (${formatMac(bulb.mac)})`;
+  if (!confirm(`Remove ${label} from the list?\n\nIf it is found on the LAN again it will be added back.`)) {
+    return;
+  }
+  const res = await api(`/bulb/${bulb.mac}`, { method: "DELETE" });
+  if (!res.ok) {
+    toastError("Could not remove bulb: HTTP " + res.status);
+    return;
+  }
+  state.bulbs = state.bulbs.filter(b => b.mac !== bulb.mac);
+  render();
+}
+
 // ---- events ----------------------------------------------------------------
 
 filterInput.addEventListener("input", () => {
   state.text = filterInput.value;
+  render();
+});
+
+cats.addEventListener("click", ev => {
+  const del = ev.target.closest(".cat-del");
+  if (del) {
+    deleteCategory(del.dataset.del);
+    return;
+  }
+  const chip = ev.target.closest(".chip");
+  if (!chip) return;
+  if (chip.dataset.new) {
+    newCategory();
+    return;
+  }
+  state.categoryFilter = chip.dataset.cat || "all";
   render();
 });
 
@@ -510,6 +916,25 @@ document.getElementById("chips").addEventListener("click", ev => {
     c.classList.toggle("active", c === chip);
   }
   render();
+});
+
+// ---- api docs --------------------------------------------------------------
+
+const docs = document.getElementById("docs");
+
+function showDocs(show) {
+  docs.hidden = !show;
+  document.body.style.overflow = show ? "hidden" : "";
+  if (show) document.getElementById("docs-close").focus();
+}
+
+document.getElementById("api-btn").addEventListener("click", () => showDocs(true));
+document.getElementById("docs-close").addEventListener("click", () => showDocs(false));
+docs.addEventListener("click", ev => {
+  if (ev.target === docs) showDocs(false);
+});
+document.addEventListener("keydown", ev => {
+  if (ev.key === "Escape" && !docs.hidden) showDocs(false);
 });
 
 document.addEventListener("visibilitychange", () => {

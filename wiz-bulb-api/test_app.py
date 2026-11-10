@@ -1,4 +1,6 @@
 import json
+import os
+import tempfile
 import threading
 import time
 import unittest
@@ -137,6 +139,102 @@ class UnitTest(unittest.TestCase):
 
     def test_host_up_uses_tcp_refusal(self):
         self.assertTrue(app.Registry._host_up("127.0.0.1", 0.2))
+
+    def _registry_with(self, mac="aabbccddeeff", present=True):
+        now = time.monotonic()
+        reg = app.Registry(hosts=["127.0.0.1"], scan_timeout=0.01, op_timeout=0.01,
+                           workers=1, interval=60, ttl=180, probe_timeout=0.01,
+                           response_grace=30, presence_interval=5,
+                           presence_timeout=0.01)
+        with reg._lock:
+            reg._by_mac[mac] = {"ip": "127.0.0.1", "present": present,
+                                "last_present": now, "last_response": now}
+        return reg, mac
+
+    def test_probe_is_rate_limited(self):
+        reg, mac = self._registry_with()
+        with reg._lock:
+            reg._by_mac[mac]["last_probe"] = time.monotonic()
+
+        def boom(*_args, **_kwargs):
+            raise AssertionError("probe hit the bulb too soon")
+
+        original = app.wiz_call
+        app.wiz_call = boom
+        try:
+            self.assertTrue(reg.probe(mac))      # gated: no network call
+        finally:
+            app.wiz_call = original
+
+    def test_state_persists_categories_and_removals(self):
+        def make(path):
+            return app.Registry(hosts=[], scan_timeout=0.01, op_timeout=0.01,
+                                workers=1, interval=60, ttl=180,
+                                state_file=path)
+
+        with tempfile.TemporaryDirectory() as tmp:
+            path = os.path.join(tmp, "state.json")
+            reg = make(path)
+            with reg._lock:
+                reg._by_mac["aabbccddeeff"] = {
+                    "ip": "192.168.1.50", "model": "X", "present": False,
+                    "first_seen": time.time(),
+                }
+            cat = reg.add_category("Bedroom")
+            with self.assertRaises(ValueError):
+                reg.add_category("bedroom")          # case-insensitive dupe
+            reg.set_category("aabbccddeeff", cat["id"])
+
+            reloaded = make(path)
+            self.assertEqual(reloaded.category_counts()[0]["count"], 1)
+            self.assertEqual(reloaded._entry("aabbccddeeff")["ip"],
+                             "192.168.1.50")
+            self.assertEqual(reloaded._entry("aabbccddeeff")["category"],
+                             cat["id"])
+
+            reloaded.remove_category(cat["id"])
+            self.assertIsNone(reloaded._entry("aabbccddeeff")["category"])
+            reloaded.remove_bulb("aabbccddeeff")
+            self.assertIsNone(reloaded._entry("aabbccddeeff"))
+            self.assertIsNone(make(path)._entry("aabbccddeeff"))
+
+    def test_order_is_stable_when_ip_changes(self):
+        reg, mac = self._registry_with()
+        with reg._lock:
+            reg._by_mac[mac]["first_seen"] = 10.0
+            reg._by_mac["112233445566"] = {"ip": "192.168.1.2", "present": True,
+                                           "first_seen": 20.0}
+            reg._by_mac[mac]["ip"] = "192.168.1.250"
+        self.assertEqual([r["mac"] for r in reg.entries()],
+                         [mac, "112233445566"])
+
+    def test_presence_retries_a_single_tcp_timeout(self):
+        reg, mac = self._registry_with()
+        calls = {"n": 0}
+
+        def flaky(ip, timeout):
+            calls["n"] += 1
+            return calls["n"] > 1        # first attempt times out
+
+        original = app.Registry._host_up
+        app.Registry._host_up = staticmethod(flaky)
+        try:
+            reg.check_presence()
+        finally:
+            app.Registry._host_up = original
+        self.assertTrue(reg._entry(mac)["present"])
+        self.assertEqual(calls["n"], 2)
+
+    def test_presence_marks_absent_after_two_failures(self):
+        reg, mac = self._registry_with()
+        original = app.Registry._host_up
+        app.Registry._host_up = staticmethod(lambda ip, timeout: False)
+        try:
+            reg.check_presence()
+        finally:
+            app.Registry._host_up = original
+        self.assertFalse(reg._entry(mac)["present"])
+        self.assertFalse(next(r for r in reg.entries() if r["mac"] == mac)["online"])
 
 
 if __name__ == "__main__":

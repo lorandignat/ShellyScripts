@@ -20,6 +20,7 @@ import re
 import socket
 import threading
 import time
+import uuid
 from concurrent.futures import ThreadPoolExecutor
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -79,8 +80,9 @@ class Registry:
     """MAC -> IP map plus the last known pilot fields, refreshed by a scanner."""
 
     def __init__(self, hosts, scan_timeout, op_timeout, workers, interval, ttl,
-                 probe_timeout=0.6, response_grace=30.0, presence_interval=5.0,
-                 presence_timeout=0.4):
+                 probe_timeout=2.0, response_grace=60.0, presence_interval=60.0,
+                 presence_timeout=1.5, status_interval=30.0,
+                 probe_min_gap=20.0, state_file: str | None = None):
         self.hosts = hosts
         self.scan_timeout = scan_timeout
         self.op_timeout = op_timeout
@@ -91,14 +93,109 @@ class Registry:
         self.response_grace = response_grace
         self.presence_interval = presence_interval
         self.presence_timeout = presence_timeout
+        self.status_interval = status_interval
+        self.probe_min_gap = probe_min_gap
+        self.categories: list[dict] = []
+        self._state_save_failed = False
+        self.state_file = self._choose_state_file(state_file)
         self.min_scan_gap = 3.0     # collapse bursts of failures into one scan
 
         self._lock = threading.Lock()
         self._scan_lock = threading.Lock()
         self._presence_lock = threading.Lock()
+        # Long-lived pools: creating threads per request is what exhausted the
+        # container's PID limit under a polling browser.
+        self._probe_pool = ThreadPoolExecutor(max_workers=16,
+                                             thread_name_prefix="probe")
+        self._presence_pool = ThreadPoolExecutor(max_workers=8,
+                                                thread_name_prefix="presence")
+        self._scan_pool = ThreadPoolExecutor(max_workers=min(32, workers),
+                                            thread_name_prefix="scan")
         self._locks: dict[str, threading.Lock] = {}
         self._by_mac: dict[str, dict] = {}
         self._last_scan = 0.0
+        self._load_state()
+
+    # ---- persistent state -------------------------------------------------
+
+    @staticmethod
+    def _choose_state_file(path: str | None) -> Path | None:
+        if not path:
+            return None
+        wanted = Path(path)
+        try:
+            wanted.parent.mkdir(parents=True, exist_ok=True)
+        except OSError:
+            pass
+        if os.access(wanted.parent, os.W_OK):
+            return wanted
+        fallback = Path("/tmp/wiz-bulb-state.json")
+        if os.access(fallback.parent, os.W_OK):
+            LOG.warning("cannot write to %s; using %s instead", path, fallback)
+            return fallback
+        LOG.warning("state directory %s is not writable; remembered bulbs and "
+                    "categories will not survive a restart. Mount a volume at "
+                    "/data to keep them.", wanted.parent)
+        return wanted
+
+    def _load_state(self) -> None:
+        path = self.state_file
+        if not path or not path.exists():
+            return
+        try:
+            data = json.loads(path.read_text())
+        except (OSError, ValueError):
+            LOG.warning("ignoring unreadable state file %s", path)
+            return
+        now = time.time()
+        bulbs = data.get("bulbs") or {}
+        if isinstance(bulbs, dict):
+            for mac, saved in bulbs.items():
+                mac = normalize_mac(mac)
+                if not mac or not isinstance(saved, dict):
+                    continue
+                self._by_mac[mac] = {
+                    "ip": saved.get("ip"),
+                    "model": saved.get("model"),
+                    "category": saved.get("category"),
+                    "first_seen": float(saved.get("first_seen") or now),
+                    "present": False,
+                    "online": False,
+                    "last_probe": 0.0,
+                }
+        cats = data.get("categories")
+        if isinstance(cats, list):
+            for cat in cats:
+                if isinstance(cat, dict) and cat.get("id") and cat.get("name"):
+                    self.categories.append(
+                        {"id": str(cat["id"]), "name": str(cat["name"])})
+        LOG.info("loaded %d bulbs and %d categories from %s",
+                 len(self._by_mac), len(self.categories), path)
+
+    def save_state(self) -> None:
+        path = self.state_file
+        if not path:
+            return
+        with self._lock:
+            bulbs = {}
+            for mac, entry in self._by_mac.items():
+                bulbs[mac] = {
+                    "ip": entry.get("ip"),
+                    "model": entry.get("model"),
+                    "category": entry.get("category"),
+                    "first_seen": entry.get("first_seen"),
+                }
+            payload = {"version": 1, "categories": self.categories,
+                       "bulbs": bulbs}
+        tmp = path.with_suffix(".tmp")
+        try:
+            tmp.write_text(json.dumps(payload, indent=1))
+            tmp.replace(path)
+            self._state_save_failed = False
+        except OSError as exc:
+            if not self._state_save_failed:
+                LOG.warning("could not save state to %s: %s", path, exc)
+                self._state_save_failed = True
 
     # ---- scanning ---------------------------------------------------------
 
@@ -122,21 +219,27 @@ class Registry:
             if time.monotonic() - self._last_scan < gap:
                 return
             started = time.monotonic()
-            with ThreadPoolExecutor(max_workers=self.workers) as pool:
-                found = [r for r in pool.map(self._probe, self.hosts) if r]
+            found = [r for r in self._scan_pool.map(self._probe, self.hosts) if r]
             self._last_scan = time.monotonic()
 
-            online = {mac for mac, _, _ in found}
             now = self._last_scan
+            changed = False
             with self._lock:
                 for mac, ip, model in found:
                     entry = self._by_mac.get(mac, {})
+                    if not entry:
+                        changed = True
+                        entry["first_seen"] = time.time()
+                    if entry.get("ip") != ip or (model and entry.get("model") != model):
+                        changed = True
                     entry.update(ip=ip, model=model or entry.get("model"),
                                  last_seen=now, present=True, last_present=now,
                                  last_response=now, online=True)
                     self._by_mac[mac] = entry
                 # Absence is decided by the TCP presence sweep, not by one
                 # UDP sweep: a lost datagram must not make a bulb disappear.
+            if changed:
+                self.save_state()
 
             LOG.info("scan: %d/%d bulbs online in %.1fs",
                      len(found), len(self.hosts), time.monotonic() - started)
@@ -176,9 +279,16 @@ class Registry:
                 return
             macs = list(targets)
             timeout = self.presence_timeout
-            with ThreadPoolExecutor(max_workers=min(64, len(macs))) as pool:
-                results = list(pool.map(
-                    lambda m: (m, self._host_up(targets[m], timeout)), macs))
+            # Wi-Fi bulbs are slow: 19 parallel TCP connects and a 0.4 s
+            # timeout made healthy bulbs look offline now and then. Keep the
+            # sweep gentle and give a missed check one immediate retry.
+            results = list(self._presence_pool.map(
+                lambda m: (m, self._host_up(targets[m], timeout)), macs))
+            retry = [m for m, up in results if not up]
+            if retry:
+                again = dict(self._presence_pool.map(
+                    lambda m: (m, self._host_up(targets[m], timeout)), retry))
+                results = [(m, again.get(m, up)) for m, up in results]
 
             now = time.monotonic()
             lost: list[str] = []
@@ -223,8 +333,10 @@ class Registry:
                 present = bool(entry.get("present"))
                 last_ok = entry.get("last_response") or 0
                 row = {k: v for k, v in entry.items()
-                       if k not in ("last_seen", "last_present", "last_response")}
+                       if k not in ("last_seen", "last_present", "last_response",
+                                     "last_probe")}
                 row["mac"] = mac
+                row["category"] = entry.get("category")
                 row["online"] = present
                 row["present"] = present
                 row["responsive"] = present and (now - last_ok) <= self.response_grace
@@ -232,7 +344,10 @@ class Registry:
                                           if entry.get("last_response") else None)
                 row["age_s"] = round(now - entry.get("last_present", now))
                 rows.append(row)
-        return sorted(rows, key=lambda e: ipaddress.ip_address(e["ip"]))
+        # Stable order: a bulb must not move when it goes offline or when
+        # DHCP hands it a new address.
+        return sorted(rows, key=lambda e: (e.get("first_seen") or 0,
+                                           e.get("mac") or ""))
 
     def resolve(self, mac: str, force: bool = False) -> str | None:
         entry = self._entry(mac)
@@ -263,6 +378,7 @@ class Registry:
         now = time.monotonic()
         with self._lock:
             entry = self._by_mac.setdefault(mac, {})
+            entry.setdefault("first_seen", time.time())
             entry.update(ip=ip, online=True, present=True,
                          last_seen=now, last_present=now, last_response=now)
             for key in REPORTED:
@@ -276,6 +392,66 @@ class Registry:
         for key in REPORTED:
             view[key] = entry.get(key)
         return view
+
+    # ---- categories / removal --------------------------------------------
+
+    def category_counts(self) -> list[dict]:
+        counts = {c["id"]: 0 for c in self.categories}
+        with self._lock:
+            for entry in self._by_mac.values():
+                cid = entry.get("category")
+                if cid in counts:
+                    counts[cid] += 1
+        return [{"id": c["id"], "name": c["name"], "count": counts[c["id"]]}
+                for c in self.categories]
+
+    def add_category(self, name) -> dict:
+        name = (name or "").strip()
+        if not name:
+            raise ValueError("name is required")
+        if len(name) > 40:
+            raise ValueError("name is too long")
+        with self._lock:
+            if any(c["name"].lower() == name.lower() for c in self.categories):
+                raise ValueError("category already exists")
+            cat = {"id": uuid.uuid4().hex[:8], "name": name}
+            self.categories.append(cat)
+        self.save_state()
+        return cat
+
+    def remove_category(self, cid: str) -> dict:
+        with self._lock:
+            cat = next((c for c in self.categories if c["id"] == cid), None)
+            if cat is None:
+                raise KeyError(cid)
+            self.categories.remove(cat)
+            for entry in self._by_mac.values():
+                if entry.get("category") == cid:
+                    entry["category"] = None
+        self.save_state()
+        return cat
+
+    def set_category(self, mac: str, cid: str | None) -> dict:
+        cid = cid or None
+        with self._lock:
+            entry = self._by_mac.get(mac)
+            if entry is None:
+                raise KeyError(mac)
+            if cid and not any(c["id"] == cid for c in self.categories):
+                raise ValueError("unknown category")
+            entry["category"] = cid
+            present = bool(entry.get("present"))
+        self.save_state()
+        return self._view(mac, present)
+
+    def remove_bulb(self, mac: str) -> str:
+        with self._lock:
+            if mac not in self._by_mac:
+                raise KeyError(mac)
+            del self._by_mac[mac]
+            self._locks.pop(mac, None)
+        self.save_state()
+        return mac
 
     # ---- bulb operations --------------------------------------------------
 
@@ -333,20 +509,29 @@ class Registry:
             self._remember(mac, ip, {"state": new})
             return {"mac": mac, "ip": ip, "online": True, "state": new}
 
-    def probe(self, mac: str) -> bool:
+    def probe(self, mac: str, force: bool = False) -> bool:
         """One cheap getPilot at the cached IP.
 
         Never scans and never touches LAN presence: presence is tracked by the
         TCP sweep, so a missed UDP reply only means "no response", not offline.
+
+        At most one probe per bulb every `probe_min_gap` seconds, so a polling
+        browser cannot turn into a stream of requests. The background status
+        loop is the one that refreshes everyone, every `status_interval`.
         """
         entry = self._entry(mac)
         if not entry or not entry.get("ip"):
             return False
 
+        now = time.monotonic()
+        if not force and now - entry.get("last_probe", 0.0) < self.probe_min_gap:
+            return bool(entry.get("present"))
+
         lock = self._lock_for(mac)
         if not lock.acquire(blocking=False):
             return bool(entry.get("present"))   # a toggle is using the bulb
         try:
+            self._mark_probe(mac)
             reply = wiz_call(entry["ip"], {"method": "getPilot"}, self.probe_timeout)
         except (OSError, ValueError):
             return False
@@ -355,6 +540,25 @@ class Registry:
             return True
         finally:
             lock.release()
+
+    def _mark_probe(self, mac: str) -> None:
+        with self._lock:
+            if mac in self._by_mac:
+                self._by_mac[mac]["last_probe"] = time.monotonic()
+
+    def status_loop(self) -> None:
+        """Refresh every reachable bulb on a slow, predictable cadence."""
+        while True:
+            try:
+                with self._lock:
+                    macs = [m for m, e in self._by_mac.items()
+                            if e.get("ip") and e.get("present")]
+                if macs:
+                    list(self._probe_pool.map(
+                        lambda m: self.probe(m, force=True), macs))
+            except Exception:
+                LOG.exception("status check failed")
+            time.sleep(self.status_interval)
 
     def live_entries(self) -> list[dict]:
         """Probe the bulbs that are currently on the LAN, then return the cache.
@@ -367,15 +571,14 @@ class Registry:
             macs = [m for m, e in self._by_mac.items()
                     if e.get("ip") and e.get("present")]
         if macs:
-            with ThreadPoolExecutor(max_workers=min(32, len(macs))) as pool:
-                list(pool.map(self.probe, macs))
+            list(self._probe_pool.map(self.probe, macs))
         return self.entries()
 
 
 def make_handler(registry: Registry, token: str, ui: bytes):
     class Handler(BaseHTTPRequestHandler):
         protocol_version = "HTTP/1.1"
-        server_version = "wiz-bulb-api/1.3"
+        server_version = "wiz-bulb-api/1.6"
 
         # -- helpers --------------------------------------------------------
 
@@ -405,6 +608,9 @@ def make_handler(registry: Registry, token: str, ui: bytes):
         def do_POST(self):
             self._route("POST")
 
+        def do_DELETE(self):
+            self._route("DELETE")
+
         def _route(self, method: str) -> None:
             path = urlparse(self.path).path
             # The UI must load without the token; its fetches will prompt for it.
@@ -417,6 +623,8 @@ def make_handler(registry: Registry, token: str, ui: bytes):
                 pass
             except Unreachable:
                 self._json(503, {"mac": getattr(self, "_mac", None), "online": False})
+            except KeyError:
+                self._fail(404, "not found")
             except ValueError as exc:
                 self._fail(400, str(exc))
             except Exception:
@@ -439,16 +647,33 @@ def make_handler(registry: Registry, token: str, ui: bytes):
                 return self._json(200, {
                     "service": "wiz-bulb-api",
                     "endpoints": [
-                        "GET  /                 web UI",
-                        "GET  /bulbs[?live=1]   known bulbs",
-                        "GET  /bulb/<mac>       200 up / 503 down",
-                        "GET  /bulb/<mac>/state state + colour",
-                        "POST /bulb/<mac>/toggle",
-                        "POST /bulb/<mac>/on",
-                        "POST /bulb/<mac>/off",
-                        "GET  /healthz",
+                        "GET    /                       web UI",
+                        "GET    /bulbs[?live=1]         known bulbs",
+                        "GET    /bulb/<mac>             200 up / 503 down",
+                        "GET    /bulb/<mac>/state       state + colour",
+                        "POST   /bulb/<mac>/toggle",
+                        "POST   /bulb/<mac>/on",
+                        "POST   /bulb/<mac>/off",
+                        "POST   /bulb/<mac>/set         setPilot body",
+                        "POST   /bulb/<mac>/category    {\"category\": <id|null>}",
+                        "DELETE /bulb/<mac>             forget a bulb",
+                        "GET    /categories             list with counts",
+                        "POST   /categories             {\"name\": ...}",
+                        "DELETE /categories/<id>",
+                        "GET    /healthz",
                     ],
                 })
+            if parts == ["categories"]:
+                if method == "GET":
+                    return self._json(200, {"categories": registry.category_counts()})
+                if method == "POST":
+                    cat = registry.add_category(self._body().get("name"))
+                    return self._json(201, cat)
+                return self._fail(405, "use GET or POST")
+            if parts[0] == "categories" and len(parts) >= 2:
+                if method != "DELETE":
+                    return self._fail(405, "use DELETE")
+                return self._json(200, {"removed": registry.remove_category(parts[1])})
             if parts[0] != "bulb" or len(parts) < 2:
                 return self._fail(404, "not found")
 
@@ -458,6 +683,8 @@ def make_handler(registry: Registry, token: str, ui: bytes):
             self._mac = mac
             action = parts[2] if len(parts) > 2 else "status"
 
+            if method == "DELETE" and action == "status":
+                return self._json(200, {"removed": registry.remove_bulb(mac)})
             if action in ("status", "state"):
                 return self._json(200, registry.status(mac))
             if method != "POST":
@@ -470,6 +697,10 @@ def make_handler(registry: Registry, token: str, ui: bytes):
                 return self._json(200, registry.set_pilot(mac, {"state": False}))
             if action == "set":
                 return self._json(200, registry.set_pilot(mac, self._body()))
+            if action == "category":
+                body = self._body()
+                return self._json(200, registry.set_category(
+                    mac, body.get("category")))
             return self._fail(404, "unknown action")
 
         def _body(self) -> dict:
@@ -508,15 +739,18 @@ def main() -> None:
 
     registry = Registry(
         hosts=hosts,
-        scan_timeout=float(os.environ.get("WIZ_SCAN_TIMEOUT", "0.3")),
-        op_timeout=float(os.environ.get("WIZ_OP_TIMEOUT", "1.5")),
+        scan_timeout=float(os.environ.get("WIZ_SCAN_TIMEOUT", "1.5")),
+        op_timeout=float(os.environ.get("WIZ_OP_TIMEOUT", "2.5")),
         workers=int(os.environ.get("WIZ_WORKERS", "64")),
-        interval=float(os.environ.get("WIZ_SCAN_INTERVAL", "60")),
-        ttl=float(os.environ.get("WIZ_CACHE_TTL", "180")),
-        probe_timeout=float(os.environ.get("WIZ_PROBE_TIMEOUT", "0.6")),
-        response_grace=float(os.environ.get("WIZ_RESPONSE_GRACE", "30")),
-        presence_interval=float(os.environ.get("WIZ_PRESENCE_INTERVAL", "5")),
-        presence_timeout=float(os.environ.get("WIZ_PRESENCE_TIMEOUT", "0.4")),
+        interval=float(os.environ.get("WIZ_SCAN_INTERVAL", "120")),
+        ttl=float(os.environ.get("WIZ_CACHE_TTL", "300")),
+        probe_timeout=float(os.environ.get("WIZ_PROBE_TIMEOUT", "2.0")),
+        response_grace=float(os.environ.get("WIZ_RESPONSE_GRACE", "60")),
+        presence_interval=float(os.environ.get("WIZ_PRESENCE_INTERVAL", "60")),
+        presence_timeout=float(os.environ.get("WIZ_PRESENCE_TIMEOUT", "1.5")),
+        status_interval=float(os.environ.get("WIZ_STATUS_INTERVAL", "30")),
+        probe_min_gap=float(os.environ.get("WIZ_PROBE_MIN_GAP", "20")),
+        state_file=os.environ.get("WIZ_STATE_FILE", "/data/state.json"),
     )
 
     port = int(os.environ.get("WIZ_PORT", "8077"))
@@ -527,6 +761,7 @@ def main() -> None:
 
     threading.Thread(target=registry.refresh_loop, daemon=True).start()
     threading.Thread(target=registry.presence_loop, daemon=True).start()
+    threading.Thread(target=registry.status_loop, daemon=True).start()
     LOG.info("listening on :%d, scanning %d hosts (%s)", port, len(hosts), subnet)
     try:
         server.serve_forever()

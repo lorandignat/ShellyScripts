@@ -14,13 +14,19 @@ services:
     environment:
       WIZ_SUBNET: 192.168.1.0/24
       WIZ_PORT: "8077"
-      WIZ_SCAN_INTERVAL: "60"
-      WIZ_SCAN_TIMEOUT: "0.3"
-      WIZ_OP_TIMEOUT: "1.5"
+      WIZ_SCAN_INTERVAL: "120"
+      WIZ_SCAN_TIMEOUT: "1.5"
+      WIZ_OP_TIMEOUT: "2.5"
+      WIZ_STATUS_INTERVAL: "30"
+      WIZ_PRESENCE_INTERVAL: "60"
       WIZ_WORKERS: "64"
       WIZ_LOG_LEVEL: INFO
       # Optional bearer token, e.g. when exposing the API beyond the LAN.
       # WIZ_API_TOKEN: "change-me"
+
+    # Known bulbs, categories and manual removals survive restarts.
+    volumes:
+      - wiz-state:/data
 
     read_only: true
     cap_drop: [ALL]
@@ -33,3 +39,6 @@ services:
 #
 #    ports:
 #      - "8077:8077"
+
+volumes:
+  wiz-state:
