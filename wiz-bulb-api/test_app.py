@@ -12,6 +12,7 @@ import app
 
 
 class FakeRegistry:
+    """Small in-memory stand-in used to exercise HTTP routing without bulbs."""
     def entries(self):
         return [{"mac": "9877d50abae0", "ip": "192.168.1.176", "online": True}]
 
@@ -36,6 +37,7 @@ class FakeRegistry:
 
 
 class ApiTest(unittest.TestCase):
+    """Verify the public HTTP contract using an ephemeral local server."""
     @classmethod
     def setUpClass(cls):
         ui = b"<!doctype html><title>bulbs</title>"
@@ -101,6 +103,7 @@ class ApiTest(unittest.TestCase):
 
 
 class UnitTest(unittest.TestCase):
+    """Cover address parsing, presence tracking, probing, and persistence."""
     def test_normalize_mac(self):
         for value in ("98:77:d5:0a:ba:e0", "98-77-D5-0A-BA-E0", "9877d50abae0", "9877D50ABAE0"):
             self.assertEqual(app.normalize_mac(value), "9877d50abae0")
@@ -112,6 +115,8 @@ class UnitTest(unittest.TestCase):
         self.assertEqual(hosts, ["192.168.1.1", "192.168.1.2"])
 
     def test_one_miss_only_means_no_response(self):
+        # UDP response health and LAN presence are deliberately independent:
+        # a missed getPilot must not mark a TCP-reachable bulb as offline.
         mac = "aabbccddeeff"
         reg = app.Registry(hosts=["127.0.0.1"], scan_timeout=0.01, op_timeout=0.01,
                            workers=1, interval=60, ttl=180, probe_timeout=0.01,
@@ -171,6 +176,8 @@ class UnitTest(unittest.TestCase):
             app.wiz_call = original
 
     def test_state_persists_categories_and_removals(self):
+        # Recreate the registry from disk to verify that durable metadata,
+        # category assignments, and removals survive a process restart.
         def make(path):
             return app.Registry(hosts=[], scan_timeout=0.01, op_timeout=0.01,
                                 workers=1, interval=60, ttl=180,
@@ -239,6 +246,162 @@ class UnitTest(unittest.TestCase):
             app.Registry._host_up = original
         self.assertFalse(reg._entry(mac)["present"])
         self.assertFalse(next(r for r in reg.entries() if r["mac"] == mac)["online"])
+
+
+    def test_parse_subnet_rejects_large_range_before_expansion(self):
+        with self.assertRaisesRegex(ValueError, "subnet too large"):
+            app.parse_subnet("10.0.0.0/8")
+
+    def test_parse_subnet_rejects_ipv6(self):
+        with self.assertRaisesRegex(ValueError, "IPv4"):
+            app.parse_subnet("2001:db8::/64")
+
+    def test_parse_subnet_accepts_small_point_to_point_networks(self):
+        self.assertEqual(app.parse_subnet("192.0.2.0/31"),
+                         ["192.0.2.0", "192.0.2.1"])
+        self.assertEqual(app.parse_subnet("192.0.2.7/32"), ["192.0.2.7"])
+
+    def test_load_config_rejects_invalid_values(self):
+        invalid_configs = [
+            {"WIZ_WORKERS": "0"},
+            {"WIZ_WORKERS": "257"},
+            {"WIZ_PORT": "70000"},
+            {"WIZ_OP_TIMEOUT": "nan"},
+            {"WIZ_PRESENCE_TIMEOUT": "-1"},
+            {"WIZ_HOSTS": "not-an-ip"},
+            {"WIZ_HOSTS": "2001:db8::1"},
+            {"WIZ_LOG_LEVEL": "VERBOSE"},
+        ]
+        for config in invalid_configs:
+            with self.subTest(config=config):
+                with self.assertRaises(ValueError):
+                    app.load_config(config)
+
+    def test_load_config_normalizes_and_deduplicates_extra_hosts(self):
+        config = app.load_config({
+            "WIZ_SUBNET": "192.0.2.0/31",
+            "WIZ_HOSTS": "192.0.2.1, 198.51.100.7,198.51.100.7",
+            "WIZ_PORT": "8080",
+        })
+        self.assertEqual(config["hosts"],
+                         ["192.0.2.0", "192.0.2.1", "198.51.100.7"])
+        self.assertEqual(config["port"], 8080)
+
+    def test_invalid_state_root_is_ignored(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = os.path.join(tmp, "state.json")
+            with open(path, "w") as state_file:
+                state_file.write("[]")
+            reg = app.Registry(hosts=[], scan_timeout=0.01, op_timeout=0.01,
+                               workers=1, interval=60, ttl=180, state_file=path)
+            self.assertEqual(reg.entries(), [])
+
+    def test_malformed_state_fields_are_skipped_or_defaulted(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = os.path.join(tmp, "state.json")
+            with open(path, "w") as state_file:
+                json.dump({
+                    "bulbs": {
+                        "aabbccddeeff": {
+                            "ip": "not-an-ip",
+                            "first_seen": "not-a-number",
+                        }
+                    },
+                    "categories": [{"id": "c1", "name": "  "}, {"id": "c2", "name": "Office"}],
+                }, state_file)
+            reg = app.Registry(hosts=[], scan_timeout=0.01, op_timeout=0.01,
+                               workers=1, interval=60, ttl=180, state_file=path)
+            entry = reg._entry("aabbccddeeff")
+            self.assertIsNone(entry["ip"])
+            self.assertGreater(entry["first_seen"], 0)
+            self.assertEqual(reg.categories, [{"id": "c2", "name": "Office"}])
+
+    def test_concurrent_category_saves_leave_valid_complete_state(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = os.path.join(tmp, "state.json")
+            reg = app.Registry(hosts=[], scan_timeout=0.01, op_timeout=0.01,
+                               workers=1, interval=60, ttl=180, state_file=path)
+            errors = []
+
+            def add(index):
+                try:
+                    reg.add_category(f"Room {index}")
+                except Exception as exc:
+                    errors.append(exc)
+
+            threads = [threading.Thread(target=add, args=(i,)) for i in range(12)]
+            for thread in threads:
+                thread.start()
+            for thread in threads:
+                thread.join()
+
+            self.assertEqual(errors, [])
+            with open(path) as state_file:
+                saved = json.load(state_file)
+            self.assertEqual(len(saved["categories"]), 12)
+            self.assertEqual({c["name"] for c in saved["categories"]},
+                             {f"Room {i}" for i in range(12)})
+
+    def test_remove_waits_for_active_operation_and_prevents_revival(self):
+        reg, mac = self._registry_with()
+        operation_started = threading.Event()
+        allow_operation_to_finish = threading.Event()
+        removal_started = threading.Event()
+        removal_finished = threading.Event()
+        original_run = reg._run
+
+        def blocked_run(requested_mac, fn):
+            operation_started.set()
+            self.assertTrue(allow_operation_to_finish.wait(2))
+            return "127.0.0.1", {"result": {"state": True}}
+
+        reg._run = blocked_run
+        operation_errors = []
+        removal_errors = []
+
+        def run_status():
+            try:
+                reg.status(mac)
+            except Exception as exc:
+                operation_errors.append(exc)
+
+        def remove():
+            removal_started.set()
+            try:
+                reg.remove_bulb(mac)
+            except Exception as exc:
+                removal_errors.append(exc)
+            finally:
+                removal_finished.set()
+
+        operation = threading.Thread(target=run_status)
+        operation.start()
+        self.assertTrue(operation_started.wait(2))
+
+        remover = threading.Thread(target=remove)
+        remover.start()
+        self.assertTrue(removal_started.wait(2))
+        time.sleep(0.05)  # removal must be waiting for the operation lock
+        self.assertFalse(removal_finished.is_set())
+
+        allow_operation_to_finish.set()
+        operation.join(2)
+        remover.join(2)
+        reg._run = original_run
+
+        self.assertFalse(operation.is_alive())
+        self.assertFalse(remover.is_alive())
+        self.assertEqual(operation_errors, [])
+        self.assertEqual(removal_errors, [])
+        self.assertIsNone(reg._entry(mac))
+
+        # A stale completion callback must not recreate the removed registry row.
+        reg._remember(mac, "127.0.0.1", {"state": True})
+        self.assertIsNone(reg._entry(mac))
+        # A later explicit request retains the pre-existing discovery path;
+        # without a discoverable bulb it reports the normal unreachable result.
+        with self.assertRaises(app.Unreachable):
+            reg.status(mac)
 
 
 if __name__ == "__main__":

@@ -773,6 +773,8 @@ curl -s -X POST http://192.168.1.5:8077/bulb/9877d50abae0/set \
 <script>
 "use strict";
 
+// Central UI state. Rendering is derived from this object; pending tracks
+// optimistic power changes so background refreshes do not overwrite them.
 const state = {
   bulbs: [],
   categories: [],
@@ -798,6 +800,8 @@ const counts = {
 
 // ---- api -------------------------------------------------------------------
 
+// Attach the API token when configured and retry once after an authorization
+// challenge, allowing the browser UI to be served without exposing the token.
 async function api(path, options, retried) {
   const opts = Object.assign({}, options);
   opts.headers = Object.assign({}, opts.headers);
@@ -896,6 +900,8 @@ function categoryName(id) {
 
 // ---- render ----------------------------------------------------------------
 
+// Rebuild the visible view from cached state and the active search/filter
+// settings. Network calls update state first, then call render().
 function render() {
   const text = state.text.trim().toLowerCase().replace(/[^a-z0-9]/g, "");
   let bulbs = state.bulbs.filter(b => {
@@ -1263,6 +1269,8 @@ function card(bulb) {
 
 // ---- data ------------------------------------------------------------------
 
+// Fetch the current bulb snapshot. Preserve a bulb's optimistic state while
+// its toggle request is in flight so polling cannot cause a visual flicker.
 async function load() {
   if (state.loading) return;
   state.loading = true;
@@ -1294,6 +1302,8 @@ function schedule() {
   state.timer = setTimeout(load, 15000);
 }
 
+// Apply the desired state immediately, then reconcile it with the API result.
+// On failure, restore the previous value and report the error to the user.
 async function toggle(bulb) {
   if (state.pending.has(bulb.mac) || !bulb.present) return;
 
@@ -1455,6 +1465,7 @@ document.addEventListener("keydown", ev => {
   closePalettes();
 });
 
+// Pause polling in background tabs; refresh immediately when the page returns.
 document.addEventListener("visibilitychange", () => {
   if (document.hidden) clearTimeout(state.timer);
   else load();

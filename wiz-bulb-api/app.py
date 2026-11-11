@@ -51,11 +51,89 @@ def normalize_mac(value: str) -> str | None:
 
 
 def parse_subnet(value: str) -> list[str]:
-    net = ipaddress.ip_network(value, strict=False)
-    hosts = [str(h) for h in net.hosts()]
-    if len(hosts) > 4096:
+    """Return IPv4 hosts in a subnet, rejecting oversized ranges up front."""
+    try:
+        net = ipaddress.ip_network(value, strict=False)
+    except ValueError as exc:
+        raise ValueError(f"invalid WIZ_SUBNET: {exc}") from None
+    if net.version != 4:
+        raise ValueError("WIZ_SUBNET must be an IPv4 network")
+
+    # /31 and /32 networks expose all addresses as hosts; other IPv4 networks
+    # reserve the network and broadcast addresses. Check before materializing.
+    host_count = net.num_addresses if net.prefixlen >= 31 else net.num_addresses - 2
+    if host_count > 4096:
         raise ValueError("subnet too large, use a /20 or smaller")
-    return hosts
+    return [str(host) for host in net.hosts()]
+
+
+def load_config(environ: dict[str, str] | None = None) -> dict:
+    """Read and validate environment configuration before starting workers."""
+    env = os.environ if environ is None else environ
+
+    def positive_float(name: str, default: str, *, allow_zero: bool = False) -> float:
+        raw = env.get(name, default)
+        try:
+            value = float(raw)
+        except (TypeError, ValueError):
+            raise ValueError(f"{name} must be a number") from None
+        valid = value >= 0 if allow_zero else value > 0
+        if not valid or not value < float("inf"):
+            qualifier = "zero or greater" if allow_zero else "greater than zero"
+            raise ValueError(f"{name} must be {qualifier}")
+        return value
+
+    def positive_int(name: str, default: str, minimum: int = 1,
+                     maximum: int | None = None) -> int:
+        raw = env.get(name, default)
+        try:
+            value = int(raw)
+        except (TypeError, ValueError):
+            raise ValueError(f"{name} must be an integer") from None
+        if value < minimum or (maximum is not None and value > maximum):
+            bounds = f"between {minimum} and {maximum}" if maximum else f"at least {minimum}"
+            raise ValueError(f"{name} must be {bounds}")
+        return value
+
+    log_level = env.get("WIZ_LOG_LEVEL", "INFO").upper()
+    if log_level not in {"DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"}:
+        raise ValueError("WIZ_LOG_LEVEL must be DEBUG, INFO, WARNING, ERROR, or CRITICAL")
+
+    subnet = env.get("WIZ_SUBNET", "192.168.1.0/24")
+    hosts = parse_subnet(subnet)
+    extra_hosts = []
+    for raw_host in env.get("WIZ_HOSTS", "").split(","):
+        raw_host = raw_host.strip()
+        if not raw_host:
+            continue
+        try:
+            address = ipaddress.ip_address(raw_host)
+        except ValueError:
+            raise ValueError(f"invalid address in WIZ_HOSTS: {raw_host}") from None
+        if address.version != 4:
+            raise ValueError(f"WIZ_HOSTS only accepts IPv4 addresses: {raw_host}")
+        extra_hosts.append(str(address))
+
+    hosts = sorted(set(hosts + extra_hosts), key=ipaddress.ip_address)
+    return {
+        "subnet": subnet,
+        "hosts": hosts,
+        "log_level": log_level,
+        "scan_timeout": positive_float("WIZ_SCAN_TIMEOUT", "1.5"),
+        "op_timeout": positive_float("WIZ_OP_TIMEOUT", "2.5"),
+        "workers": positive_int("WIZ_WORKERS", "64", minimum=1, maximum=256),
+        "interval": positive_float("WIZ_SCAN_INTERVAL", "120"),
+        "ttl": positive_float("WIZ_CACHE_TTL", "300"),
+        "probe_timeout": positive_float("WIZ_PROBE_TIMEOUT", "2.0"),
+        "response_grace": positive_float("WIZ_RESPONSE_GRACE", "60", allow_zero=True),
+        "presence_interval": positive_float("WIZ_PRESENCE_INTERVAL", "60"),
+        "presence_timeout": positive_float("WIZ_PRESENCE_TIMEOUT", "1.5"),
+        "status_interval": positive_float("WIZ_STATUS_INTERVAL", "30"),
+        "probe_min_gap": positive_float("WIZ_PROBE_MIN_GAP", "20", allow_zero=True),
+        "state_file": env.get("WIZ_STATE_FILE", "/data/state.json"),
+        "port": positive_int("WIZ_PORT", "8077", minimum=1, maximum=65535),
+        "token": env.get("WIZ_API_TOKEN", ""),
+    }
 
 
 def wiz_call(ip: str, payload: dict, timeout: float) -> dict:
@@ -73,16 +151,29 @@ def wiz_call(ip: str, payload: dict, timeout: float) -> dict:
 
 
 class Unreachable(Exception):
-    pass
+    """Raised when a bulb cannot be reached or does not accept an operation."""
 
 
 class Registry:
     """MAC -> IP map plus the last known pilot fields, refreshed by a scanner."""
 
-    def __init__(self, hosts, scan_timeout, op_timeout, workers, interval, ttl,
-                 probe_timeout=2.0, response_grace=60.0, presence_interval=60.0,
-                 presence_timeout=1.5, status_interval=30.0,
-                 probe_min_gap=20.0, state_file: str | None = None):
+    def __init__(
+        self,
+        hosts,
+        scan_timeout,
+        op_timeout,
+        workers,
+        interval,
+        ttl,
+        probe_timeout=2.0,
+        response_grace=60.0,
+        presence_interval=60.0,
+        presence_timeout=1.5,
+        status_interval=30.0,
+        probe_min_gap=20.0,
+        state_file: str | None = None,
+    ):
+        """Initialize caches, synchronization primitives, and worker pools."""
         self.hosts = hosts
         self.scan_timeout = scan_timeout
         self.op_timeout = op_timeout
@@ -103,14 +194,22 @@ class Registry:
         self._lock = threading.Lock()
         self._scan_lock = threading.Lock()
         self._presence_lock = threading.Lock()
-        # Long-lived pools: creating threads per request is what exhausted the
-        # container's PID limit under a polling browser.
-        self._probe_pool = ThreadPoolExecutor(max_workers=16,
-                                             thread_name_prefix="probe")
-        self._presence_pool = ThreadPoolExecutor(max_workers=8,
-                                                thread_name_prefix="presence")
-        self._scan_pool = ThreadPoolExecutor(max_workers=min(32, workers),
-                                            thread_name_prefix="scan")
+        # Serialize snapshots and writes so concurrent saves cannot race on the temp file.
+        self._state_save_lock = threading.Lock()
+        # Keep pools alive across requests. Creating a fresh set of threads
+        # for each browser poll previously exhausted the container PID limit.
+        self._probe_pool = ThreadPoolExecutor(
+            max_workers=16,
+            thread_name_prefix="probe",
+        )
+        self._presence_pool = ThreadPoolExecutor(
+            max_workers=8,
+            thread_name_prefix="presence",
+        )
+        self._scan_pool = ThreadPoolExecutor(
+            max_workers=min(32, workers),
+            thread_name_prefix="scan",
+        )
         self._locks: dict[str, threading.Lock] = {}
         self._by_mac: dict[str, dict] = {}
         self._last_scan = 0.0
@@ -147,18 +246,35 @@ class Registry:
         except (OSError, ValueError):
             LOG.warning("ignoring unreadable state file %s", path)
             return
+        # Valid JSON can still have the wrong structure at the root.
+        if not isinstance(data, dict):
+            LOG.warning("ignoring state file with invalid root structure: %s", path)
+            return
+
         now = time.time()
-        bulbs = data.get("bulbs") or {}
+        bulbs = data.get("bulbs")
         if isinstance(bulbs, dict):
-            for mac, saved in bulbs.items():
-                mac = normalize_mac(mac)
+            for saved_mac, saved in bulbs.items():
+                mac = normalize_mac(saved_mac)
                 if not mac or not isinstance(saved, dict):
                     continue
+                try:
+                    first_seen = float(saved.get("first_seen") or now)
+                except (TypeError, ValueError):
+                    first_seen = now
+                ip = saved.get("ip")
+                if ip is not None:
+                    try:
+                        parsed_ip = ipaddress.ip_address(ip)
+                    except (TypeError, ValueError):
+                        ip = None
+                    else:
+                        ip = str(parsed_ip) if parsed_ip.version == 4 else None
                 self._by_mac[mac] = {
-                    "ip": saved.get("ip"),
+                    "ip": ip,
                     "model": saved.get("model"),
                     "category": saved.get("category"),
-                    "first_seen": float(saved.get("first_seen") or now),
+                    "first_seen": first_seen,
                     "present": False,
                     "online": False,
                     "last_probe": 0.0,
@@ -166,9 +282,10 @@ class Registry:
         cats = data.get("categories")
         if isinstance(cats, list):
             for cat in cats:
-                if isinstance(cat, dict) and cat.get("id") and cat.get("name"):
+                if (isinstance(cat, dict) and cat.get("id") and
+                        isinstance(cat.get("name"), str) and cat["name"].strip()):
                     self.categories.append(
-                        {"id": str(cat["id"]), "name": str(cat["name"])})
+                        {"id": str(cat["id"]), "name": cat["name"]})
         LOG.info("loaded %d bulbs and %d categories from %s",
                  len(self._by_mac), len(self.categories), path)
 
@@ -176,26 +293,31 @@ class Registry:
         path = self.state_file
         if not path:
             return
-        with self._lock:
-            bulbs = {}
-            for mac, entry in self._by_mac.items():
-                bulbs[mac] = {
-                    "ip": entry.get("ip"),
-                    "model": entry.get("model"),
-                    "category": entry.get("category"),
-                    "first_seen": entry.get("first_seen"),
-                }
-            payload = {"version": 1, "categories": self.categories,
-                       "bulbs": bulbs}
-        tmp = path.with_suffix(".tmp")
-        try:
-            tmp.write_text(json.dumps(payload, indent=1))
-            tmp.replace(path)
-            self._state_save_failed = False
-        except OSError as exc:
-            if not self._state_save_failed:
-                LOG.warning("could not save state to %s: %s", path, exc)
-                self._state_save_failed = True
+
+        # The save lock covers snapshot creation and the atomic file swap.
+        # Copy mutable structures under the registry lock before serialization.
+        with self._state_save_lock:
+            with self._lock:
+                bulbs = {}
+                for mac, entry in self._by_mac.items():
+                    bulbs[mac] = {
+                        "ip": entry.get("ip"),
+                        "model": entry.get("model"),
+                        "category": entry.get("category"),
+                        "first_seen": entry.get("first_seen"),
+                    }
+                categories = [dict(category) for category in self.categories]
+                payload = {"version": 1, "categories": categories, "bulbs": bulbs}
+
+            tmp = path.with_suffix(".tmp")
+            try:
+                tmp.write_text(json.dumps(payload, indent=1))
+                tmp.replace(path)
+                self._state_save_failed = False
+            except (OSError, TypeError, ValueError) as exc:
+                if not self._state_save_failed:
+                    LOG.warning("could not save state to %s: %s", path, exc)
+                    self._state_save_failed = True
 
     # ---- scanning ---------------------------------------------------------
 
@@ -274,7 +396,11 @@ class Registry:
             return
         try:
             with self._lock:
-                targets = {m: e["ip"] for m, e in self._by_mac.items() if e.get("ip")}
+                targets = {
+                    mac: entry["ip"]
+                    for mac, entry in self._by_mac.items()
+                    if entry.get("ip")
+                }
             if not targets:
                 return
             macs = list(targets)
@@ -305,7 +431,8 @@ class Registry:
                             lost.append(mac)
                         entry["present"] = False
             if lost:
-                # The address may have moved; refresh the MAC map once.
+                # A failed presence check may mean DHCP changed the address. Refresh
+        # the MAC-to-IP mapping once before declaring the bulb absent.
                 self.scan(force=True)
         finally:
             self._presence_lock.release()
@@ -344,10 +471,14 @@ class Registry:
                                           if entry.get("last_response") else None)
                 row["age_s"] = round(now - entry.get("last_present", now))
                 rows.append(row)
-        # Stable order: a bulb must not move when it goes offline or when
-        # DHCP hands it a new address.
-        return sorted(rows, key=lambda e: (e.get("first_seen") or 0,
-                                           e.get("mac") or ""))
+        # Keep cards in a stable order across disconnects and DHCP changes.
+        return sorted(
+            rows,
+            key=lambda entry: (
+                entry.get("first_seen") or 0,
+                entry.get("mac") or "",
+            ),
+        )
 
     def resolve(self, mac: str, force: bool = False) -> str | None:
         entry = self._entry(mac)
@@ -377,8 +508,9 @@ class Registry:
     def _remember(self, mac: str, ip: str, pilot: dict) -> None:
         now = time.monotonic()
         with self._lock:
-            entry = self._by_mac.setdefault(mac, {})
-            entry.setdefault("first_seen", time.time())
+            entry = self._by_mac.get(mac)
+            if entry is None:
+                return
             entry.update(ip=ip, online=True, present=True,
                          last_seen=now, last_present=now, last_response=now)
             # A pilot describes exactly one colour mode. Keeping fields from
@@ -456,18 +588,27 @@ class Registry:
         return self._view(mac, present)
 
     def remove_bulb(self, mac: str) -> str:
+        # Wait for active work to finish. Keep the lock mapped so queued and
+        # future operations for this MAC cannot end up using different locks.
+        operation_lock = self._lock_for(mac)
+        with operation_lock:
+            with self._lock:
+                if mac not in self._by_mac:
+                    raise KeyError(mac)
+                del self._by_mac[mac]
+        self.save_state()
+        return mac
+
+    def _require_registered(self, mac: str) -> None:
+        """Reject work queued behind a removal instead of reviving the entry."""
         with self._lock:
             if mac not in self._by_mac:
                 raise KeyError(mac)
-            del self._by_mac[mac]
-            self._locks.pop(mac, None)
-        self.save_state()
-        return mac
 
     # ---- bulb operations --------------------------------------------------
 
     def _run(self, mac: str, fn):
-        """Resolve, call, and retry once after a rescan if the IP went stale."""
+        """Run an operation, retrying once if a rescan finds a new IP."""
         for attempt in (0, 1):
             ip = self.resolve(mac)
             if not ip:
@@ -487,7 +628,13 @@ class Registry:
         raise Unreachable(mac)
 
     def status(self, mac: str) -> dict:
+        # Preserve discovery for previously unknown MACs. If this request
+        # started with a known entry, however, do not revive it if removal
+        # wins the race while the request waits for the operation lock.
+        was_registered = self._entry(mac) is not None
         with self._lock_for(mac):
+            if was_registered:
+                self._require_registered(mac)
             ip, reply = self._run(mac, lambda ip: wiz_call(
                 ip, {"method": "getPilot"}, self.op_timeout))
             self._remember(mac, ip, reply.get("result", {}))
@@ -497,7 +644,10 @@ class Registry:
         body = {k: v for k, v in payload.items() if k in SETTABLE}
         if not body:
             raise ValueError("nothing to set")
+        was_registered = self._entry(mac) is not None
         with self._lock_for(mac):
+            if was_registered:
+                self._require_registered(mac)
             ip, reply = self._run(mac, lambda ip: wiz_call(
                 ip, {"method": "setPilot", "params": body}, self.op_timeout))
             if not reply.get("result", {}).get("success", True):
@@ -506,7 +656,10 @@ class Registry:
             return {"mac": mac, "ip": ip, "online": True, "applied": body}
 
     def toggle(self, mac: str) -> dict:
+        was_registered = self._entry(mac) is not None
         with self._lock_for(mac):
+            if was_registered:
+                self._require_registered(mac)
             entry = self._entry(mac) or {}
             state = entry.get("state")
             if state is None:
@@ -542,6 +695,9 @@ class Registry:
         if not lock.acquire(blocking=False):
             return bool(entry.get("present"))   # a toggle is using the bulb
         try:
+            entry = self._entry(mac)
+            if not entry or not entry.get("ip"):
+                return False
             self._mark_probe(mac)
             reply = wiz_call(entry["ip"], {"method": "getPilot"}, self.probe_timeout)
         except (OSError, ValueError):
@@ -562,8 +718,11 @@ class Registry:
         while True:
             try:
                 with self._lock:
-                    macs = [m for m, e in self._by_mac.items()
-                            if e.get("ip") and e.get("present")]
+                    macs = [
+                        mac
+                        for mac, entry in self._by_mac.items()
+                        if entry.get("ip") and entry.get("present")
+                    ]
                 if macs:
                     list(self._probe_pool.map(
                         lambda m: self.probe(m, force=True), macs))
@@ -624,7 +783,7 @@ def make_handler(registry: Registry, token: str, ui: bytes):
 
         def _route(self, method: str) -> None:
             path = urlparse(self.path).path
-            # The UI must load without the token; its fetches will prompt for it.
+            # Serve the UI without authentication; protect its API requests.
             if token and path not in ("/", "/ui", "/favicon.ico"):
                 if self.headers.get("Authorization", "") != f"Bearer {token}":
                     return self._fail(401, "unauthorized")
@@ -654,7 +813,7 @@ def make_handler(registry: Registry, token: str, ui: bytes):
             if parts == ["bulbs"] and method == "GET":
                 live = parse_qs(urlparse(self.path).query).get("live", ["0"])[0] not in ("0", "")
                 bulbs = registry.live_entries() if live else registry.entries()
-                # One request gives the UI everything it needs.
+                # Return bulbs and room counts together to avoid a second UI request.
                 return self._json(200, {"bulbs": bulbs,
                                         "categories": registry.category_counts()})
             if parts == ["api"]:
@@ -718,6 +877,7 @@ def make_handler(registry: Registry, token: str, ui: bytes):
             return self._fail(404, "unknown action")
 
         def _body(self) -> dict:
+            """Read and validate a JSON object from the request body."""
             length = int(self.headers.get("Content-Length") or 0)
             if length <= 0:
                 return {}
@@ -741,42 +901,40 @@ def load_ui() -> bytes:
 
 
 def main() -> None:
+    """Validate configuration, start background workers, and serve HTTP requests."""
+    # Fail fast before creating pools or starting background threads.
+    config = load_config()
     logging.basicConfig(
-        level=os.environ.get("WIZ_LOG_LEVEL", "INFO").upper(),
+        level=config["log_level"],
         format="%(asctime)s %(levelname)s %(message)s",
     )
-
-    subnet = os.environ.get("WIZ_SUBNET", "192.168.1.0/24")
-    hosts = parse_subnet(subnet)
-    extra = [h.strip() for h in os.environ.get("WIZ_HOSTS", "").split(",") if h.strip()]
-    hosts = sorted(set(hosts + extra), key=ipaddress.ip_address)
-
     registry = Registry(
-        hosts=hosts,
-        scan_timeout=float(os.environ.get("WIZ_SCAN_TIMEOUT", "1.5")),
-        op_timeout=float(os.environ.get("WIZ_OP_TIMEOUT", "2.5")),
-        workers=int(os.environ.get("WIZ_WORKERS", "64")),
-        interval=float(os.environ.get("WIZ_SCAN_INTERVAL", "120")),
-        ttl=float(os.environ.get("WIZ_CACHE_TTL", "300")),
-        probe_timeout=float(os.environ.get("WIZ_PROBE_TIMEOUT", "2.0")),
-        response_grace=float(os.environ.get("WIZ_RESPONSE_GRACE", "60")),
-        presence_interval=float(os.environ.get("WIZ_PRESENCE_INTERVAL", "60")),
-        presence_timeout=float(os.environ.get("WIZ_PRESENCE_TIMEOUT", "1.5")),
-        status_interval=float(os.environ.get("WIZ_STATUS_INTERVAL", "30")),
-        probe_min_gap=float(os.environ.get("WIZ_PROBE_MIN_GAP", "20")),
-        state_file=os.environ.get("WIZ_STATE_FILE", "/data/state.json"),
+        hosts=config["hosts"],
+        scan_timeout=config["scan_timeout"],
+        op_timeout=config["op_timeout"],
+        workers=config["workers"],
+        interval=config["interval"],
+        ttl=config["ttl"],
+        probe_timeout=config["probe_timeout"],
+        response_grace=config["response_grace"],
+        presence_interval=config["presence_interval"],
+        presence_timeout=config["presence_timeout"],
+        status_interval=config["status_interval"],
+        probe_min_gap=config["probe_min_gap"],
+        state_file=config["state_file"],
     )
 
-    port = int(os.environ.get("WIZ_PORT", "8077"))
-    token = os.environ.get("WIZ_API_TOKEN", "")
-    server = ThreadingHTTPServer(("0.0.0.0", port),
-                                 make_handler(registry, token, load_ui()))
+    server = ThreadingHTTPServer(
+        ("0.0.0.0", config["port"]),
+        make_handler(registry, config["token"], load_ui()),
+    )
     server.daemon_threads = True
 
     threading.Thread(target=registry.refresh_loop, daemon=True).start()
     threading.Thread(target=registry.presence_loop, daemon=True).start()
     threading.Thread(target=registry.status_loop, daemon=True).start()
-    LOG.info("listening on :%d, scanning %d hosts (%s)", port, len(hosts), subnet)
+    LOG.info("listening on :%d, scanning %d hosts (%s)",
+             config["port"], len(config["hosts"]), config["subnet"])
     try:
         server.serve_forever()
     except KeyboardInterrupt:
